@@ -11,7 +11,7 @@ This fork tracks upstream (`bookorbit/bookorbit`) stable releases and carries a 
 | `custom/3.6`       | Previous patch queue, preserved for reference.                                                                                        |
 | feature branch     | One patch, based on the current patch queue. Use `BO-<issue>-<description>` when linked to an issue, otherwise `codex/<description>`. |
 
-The current stable base is `v3.8.0` (`450c18e2`), published on 11 November 2026. The previous fork changes were replayed with `cherry-pick -x`; application code and upstream migration history match the tag. See [PATCH_PLAN.md](PATCH_PLAN.md) for the proposed sidebar, provider, and series-request work.
+The current stable base is `v3.8.0` (`450c18e2`), published on 11 November 2026. The previous fork changes were replayed with `cherry-pick -x`; upstream migration history still matches the tag. Runtime changes are limited to the custom-version compatibility patch described below. See [PATCH_PLAN.md](PATCH_PLAN.md) for the proposed sidebar, provider, and series-request work.
 
 `upstream/main` can contain unreleased changes. Updating its mirror must not change the base of the patch queue. This checkout's `main` and `origin/main` still point at the previous `99aa7dce` snapshot; advancing them is separate from updating the stable patch branch.
 
@@ -34,19 +34,21 @@ git config rerere.enabled true
 
 ## Versioning
 
-Custom builds use a four-part version: `v3.8.0.N`, where `N` counts builds of our patch set on that exact upstream base. Never move a published tag. No custom release tag is created just by updating the source branch.
+Custom releases use `v<upstream-version>-custom.<revision>`. The first release is `v3.8.0-custom.1`: upstream base `3.8.0`, custom revision `1`. The image tag omits the leading `v`: `ghcr.io/alpasyon007/bookorbit:3.8.0-custom.1`. The app and image version label retain the full Git tag.
 
-Do not use suffixes such as `v3.8.0-custom.1` with the current parsers. The update check and the What's New filter require numeric parts; a suffix causes comparisons to fail. With `v3.8.0.N`, only the first three parts are compared, so the update check still reports a newer upstream stable release. This four-part scheme is for fork image tags, not npm package versions.
+Increment the custom revision for each changed build on the same base: `v3.8.0-custom.2`, then `v3.8.0-custom.3`. Reset it when rebasing, for example `v3.8.1-custom.1`. Revisions start at 1, without leading zeroes. Never move a published Git tag or overwrite an image with different contents; create a new custom revision. Branch pushes alone do not create releases. Numeric four-part tags such as `v3.8.0.1` are retired and cannot trigger the custom publisher.
+
+The hyphenated label is accepted by Docker tags and uses SemVer's suffix syntax. Generic SemVer tools sort such a suffix below the corresponding plain release, so this fork deliberately compares the upstream base for update notifications and What's New. `v3.8.0-custom.1` therefore reports no upstream update for `v3.8.0`, but does report `v3.8.1` or `v3.9.0`. The UI shows the complete custom version. These checks concern upstream releases, not newer custom revisions. See the [SemVer precedence rules](https://semver.org/#spec-item-11).
 
 ## Building an image
 
-Pushing a tag matching `v*.*.*.*` runs `.github/workflows/custom-image.yml`. It validates four numeric components, builds the `Dockerfile` with `APP_VERSION` set to the tag, and publishes `ghcr.io/alpasyon007/bookorbit:<version>` with fork source and commit labels. Branch pushes do not publish an image.
+Pushing a tag matching `v*.*.*-custom.*` runs `.github/workflows/custom-image.yml`. The shared validator in `scripts/fork/release-version.mjs` requires the exact custom format before checks and again before publication. The Dockerfile receives the full tag as `APP_VERSION`; images carry fork source, commit and version labels. Branch pushes do not publish an image.
 
 The workflow builds the app for **linux/amd64 only**. Publishing depends on the reusable fork checks passing for the exact tagged commit. Add arm64 only if the deployment host needs it. The read-aloud worker is a separate image: while unmodified, pin `READ_ALOUD_WORKER_IMAGE=ghcr.io/bookorbit/bookorbit-read-aloud-worker:3.8.0` when using that optional service.
 
 ### Automated publishing gate
 
-`.github/workflows/fork-checks.yml` runs for `codex/**`, `custom/**` and `BO-*-*` branch pushes, PRs targeting a patch branch, and manual runs. `custom-image.yml` calls that same workflow when a four-part release tag is pushed. A [local reusable workflow reference](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#calling-a-reusable-workflow) uses the caller's commit; every checkout explicitly uses `github.sha`.
+`.github/workflows/fork-checks.yml` runs for `codex/**`, `custom/**` and `BO-*-*` branch pushes, PRs targeting a patch branch, and manual runs. `custom-image.yml` calls that same workflow when a custom release tag is pushed. A [local reusable workflow reference](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#calling-a-reusable-workflow) uses the caller's commit; every checkout explicitly uses `github.sha`.
 
 The required checks are:
 
@@ -56,7 +58,7 @@ The required checks are:
 4. Build the production image without publishing, then run its real entrypoint against a fresh disposable database. Verify migration/startup, initial setup, login/session, empty library browsing/search, app version, and built client assets.
 5. A final gate requires every job to report `success`. Failed, cancelled, skipped or missing checks block publication.
 
-On a release tag, the smoke-tested image is saved as a one-day artifact. Only after the gate passes can the separate publishing job download that run's archive, verify the Docker image ID and revision/version labels, log in to GHCR and push it. There is no second build. Verification jobs have only `contents: read`; only publishing receives `packages: write`. Branch and PR runs cannot publish. No manual publish bypass is provided.
+On a release tag, the smoke-tested image is saved as a one-day artifact. Only after the gate passes can the separate publishing job download that run's archive, verify the loaded Docker image ID and revision/version labels, log in to GHCR and push it. It then pulls the published image, verifies the same image ID and records its immutable repository digest in the job summary. There is no second build. Verification jobs have only `contents: read`; only publishing receives `packages: write`. Branch and PR runs cannot publish. No manual publish bypass is provided.
 
 The gate verifies a clean database install, not every previous custom database upgrade. Continue testing restored production backups before deploying schema changes. Add feature-specific E2E suites to the fork matrix when a patch needs them; the baseline matrix does not replace Kobo, metadata or request-specific coverage.
 
@@ -71,6 +73,8 @@ The gate verifies a clean database install, not every previous custom database u
 | `docs/FORK_WORKFLOW.md`, `docs/PATCH_PLAN.md` | Porting procedure and patch inventory              | Current stable base and retained patch decisions          |
 
 No upstream workflow, package script, Dockerfile or application source file is changed by this foundation. Reapply the fork-owned files together, then run the checks on the new base. A changed toolchain declaration or API contract should fail visibly so the small adapter or smoke contract can be reviewed.
+
+Custom-version compatibility is a separate runtime patch: `server/src/common/utils/upstream-version.utils.ts` owns upstream-base parsing, with narrow hooks in `app-info.service.ts` and `release-notes.service.ts`. The sidebar's `client/src/components/sidebar/versionUi.ts` accepts custom labels for update indicators without linking them to nonexistent upstream releases. The patch preserves the displayed label, supports reading legacy numeric versions, and rejects malformed custom versions. Port these adapters and their regression tests together; revisit the three hooks if upstream changes its update/release-note handling. The general KOReader version parser is unaffected.
 
 The v3.8.0 authorization test inventory omits `POST /admin/download-clients/validate`. A separate compatibility patch adds `server/test/e2e/authorization-matrix/route-inventory/routes-fork.json` and registers it through the inventory manifest. It preserves the existing parity assertion and adds the route to the permission/API-key probes. On each upstream upgrade, check whether upstream now inventories the route; if so, drop the fork chunk and its manifest registration. Do not add it to the uncovered-route baseline or skip the failing test.
 
@@ -91,11 +95,11 @@ After verification, an example first release is:
 
 ```bash
 git switch codex/custom-3.8
-git tag -a v3.8.0.1 -m "custom build 3.8.0.1"
-git push origin codex/custom-3.8 v3.8.0.1
+git tag -a v3.8.0-custom.1 -m "custom build 3.8.0-custom.1"
+git push origin codex/custom-3.8 v3.8.0-custom.1
 ```
 
-Deploy with `APP_IMAGE=ghcr.io/alpasyon007/bookorbit:3.8.0.1` in the deployment environment, or pin the tested image digest. Do not use upstream image names for fork builds.
+Deploy with `APP_IMAGE=ghcr.io/alpasyon007/bookorbit:3.8.0-custom.1` in the deployment environment, or pin the tested image digest. Do not use upstream image names for fork builds.
 
 Production Compose uses PostgreSQL 18 with pgvector. The app entrypoint applies database migrations before startup; there is no separate migration job. Before upgrading a running instance, back up the database and app data and test the upgrade on a restored copy. The v3.6.0 to v3.8.0 upgrade includes migrations 0132 through 0142; **0132 removes podcast tables and data**. Record the previous image digest and database backup together, because image rollback alone does not reverse migrations. Updating this repository does not deploy it or migrate an existing database.
 

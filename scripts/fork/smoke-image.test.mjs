@@ -62,7 +62,7 @@ async function fixture(t, overrides = {}) {
         break;
       case "/api/v1/app-info":
         assert.equal(req.headers.authorization, "Bearer login-token");
-        response = { version: "v3.8.0.1" };
+        response = { version: "v3.8.0-custom.1" };
         break;
       case "/":
         contentType = "text/html";
@@ -88,7 +88,7 @@ async function fixture(t, overrides = {}) {
     calls,
     options: {
       baseUrl: `http://127.0.0.1:${server.address().port}`,
-      expectedVersion: "v3.8.0.1",
+      expectedVersion: "v3.8.0-custom.1",
       setupToken: "test-bootstrap-token",
       readyTimeoutMs: 2_000,
       pollIntervalMs: 10,
@@ -156,7 +156,7 @@ test("aborts a stalled API request", async (t) => {
 });
 
 test("rejects nonlocal targets and missing version before making requests", async () => {
-  const options = { baseUrl: "http://example.com", expectedVersion: "v3.8.0.1", setupToken: "test" };
+  const options = { baseUrl: "http://example.com", expectedVersion: "v3.8.0-custom.1", setupToken: "test" };
   await assert.rejects(smokeImage(options), /loopback/);
   await assert.rejects(smokeImage({ ...options, baseUrl: "http://127.0.0.1", expectedVersion: "" }), /version is required/);
   await assert.rejects(smokeImage({ ...options, baseUrl: "http://user:secret@127.0.0.1" }), /without credentials/);

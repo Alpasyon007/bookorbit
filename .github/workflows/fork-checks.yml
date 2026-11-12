@@ -30,6 +30,11 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
     steps:
+      - name: Checkout release validation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - name: Resolve build version
         id: meta
         shell: bash
@@ -40,11 +45,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$REF_TYPE" == tag ]]; then
-            if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::Custom image tags must use vMAJOR.MINOR.PATCH.BUILD."
-              exit 1
-            fi
-            echo "version=$REF_NAME" >> "$GITHUB_OUTPUT"
+            VERSION=$(node scripts/fork/release-version.mjs "$REF_NAME")
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           else
             echo "version=sha-${COMMIT}" >> "$GITHUB_OUTPUT"
           fi
@@ -139,7 +141,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       artifact: ${{ steps.archive.outputs.artifact }}
-      image-id: ${{ steps.build.outputs.imageid }}
+      image-id: ${{ steps.identity.outputs.image-id }}
     services:
       postgres:
         image: pgvector/pgvector:pg18
@@ -191,6 +193,14 @@ jobs:
             -e CLIENT_URL=http://127.0.0.1:3000 \
             "$IMAGE"
           node scripts/fork/smoke-image.mjs
+      - name: Record tested image identity
+        id: identity
+        env:
+          IMAGE: bookorbit-checked:${{ github.sha }}
+        run: |
+          IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+          test -n "$IMAGE_ID"
+          echo "image-id=$IMAGE_ID" >> "$GITHUB_OUTPUT"
       - name: Show container logs on failure
         if: failure()
         run: docker logs bookorbit-fork-smoke || true

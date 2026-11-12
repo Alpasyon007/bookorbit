@@ -19,7 +19,7 @@ Keep one concern per commit and one feature per branch. Do not mix sidebar chang
 
 ## 0. Build and verification foundation
 
-The Custom Image workflow publishes an amd64 app image on four-part tags such as `v3.8.0.1`. The build foundation is implemented in fork-owned workflows, a thin setup action and `scripts/fork/`; it does not modify upstream application code or workflows. See the [automated gate and portability boundaries](FORK_WORKFLOW.md#automated-publishing-gate).
+The Custom Image workflow publishes an amd64 app image on explicit custom tags such as `v3.8.0-custom.1`. The build foundation is implemented in fork-owned workflows, a thin setup action and `scripts/fork/`. A separate runtime compatibility patch preserves upstream update checks and release-note filtering for these labels. See the [automated gate and portability boundaries](FORK_WORKFLOW.md#automated-publishing-gate).
 
 Implemented checks:
 
@@ -113,5 +113,7 @@ Acceptance tests must cover duplicate clicks/concurrent submissions, two users r
 | Durable series tracking              | Optional later feature                                       | Yes                 | Migration/restore/restart tests                                                  |
 
 For each implemented product patch, record its commit, acceptance example, exact test command and upstream status. At every release upgrade, keep, replace or retire each patch explicitly. Never regenerate a custom migration that has already run against a real database.
+
+Version-label patch: `upstream-version.utils.ts` is the shared server adapter, injected into app-info and release-notes. The sidebar's `versionUi.ts` also recognizes custom versions for update indicators. The patch displays `v3.8.0-custom.1` while comparing against upstream `v3.8.0`, and needs no migration. Its utility tests and separate fork-version tests cover same-base, newer-base, malformed labels, release-note caps and update indicators. Port it independently of the CI foundation.
 
 Compatibility patch: v3.8.0's authorization inventory misses `POST /admin/download-clients/validate`. The fork-owned `routes-fork.json` chunk and small manifest registration add this existing route to the `ManageAppSettings` and write-API-key checks. Validate with `pnpm run e2e:run -- authorization-matrix --passWithNoTests=false`. This changes test metadata only, has no migration, and should be dropped when upstream inventories the route.
