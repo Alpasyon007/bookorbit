@@ -101,15 +101,15 @@ Acceptance tests must cover duplicate clicks/concurrent submissions, two users r
 
 ## Patch ledger
 
-| Patch                                | Status                                                      | Migration           | Verification                                                                     |
-| ------------------------------------ | ----------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------- |
-| Fork workflow documentation          | Carried from `c837937b`; updated for v3.8.0                 | None                | Documentation and Git ancestry                                                   |
-| Custom Image workflow                | Carried from `ca689ba6`; numeric tags and fork labels added | None                | Formatting, workflow parsing and tag-validation checks; hosted build pending     |
-| Fork checks and publish gate         | Implemented in fork-owned workflows/action/scripts          | None                | Failure-path tests, E2E, builds and container smoke checks gate the exact commit |
-| Sidebar improvement                  | Planned; exact UI change to choose                          | Probably none       | Sidebar component/composable tests and responsive review                         |
-| Additional metadata provider         | Planned; source to choose                                   | None in BookOrbit   | Provider contract fixtures and integration tests                                 |
-| Cover drawer provider integration    | Optional follow-up                                          | Probably none       | Cover API/DTO/preferences/UI tests                                               |
-| Series preview and selected requests | Planned; catalogue source to choose                         | None for capped MVP | Request and authorization tests                                                  |
-| Durable series tracking              | Optional later feature                                      | Yes                 | Migration/restore/restart tests                                                  |
+| Patch                                | Status                                                       | Migration           | Verification                                                                     |
+| ------------------------------------ | ------------------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------- |
+| Fork workflow documentation          | Carried from `c837937b`; updated for v3.8.0                  | None                | Documentation and Git ancestry                                                   |
+| Custom Image workflow                | Carried from `ca689ba6`; now publishes the verified artifact | None                | Reusable checks gate publication; an explicit release tag is required            |
+| Fork checks and publish gate         | Implemented in fork-owned workflows/action/scripts           | None                | Failure-path tests, E2E, builds and container smoke checks gate the exact commit |
+| Sidebar improvement                  | Planned; exact UI change to choose                           | Probably none       | Sidebar component/composable tests and responsive review                         |
+| Additional metadata provider         | Planned; source to choose                                    | None in BookOrbit   | Provider contract fixtures and integration tests                                 |
+| Cover drawer provider integration    | Optional follow-up                                           | Probably none       | Cover API/DTO/preferences/UI tests                                               |
+| Series preview and selected requests | Planned; catalogue source to choose                          | None for capped MVP | Request and authorization tests                                                  |
+| Durable series tracking              | Optional later feature                                       | Yes                 | Migration/restore/restart tests                                                  |
 
 For each implemented product patch, record its commit, acceptance example, exact test command and upstream status. At every release upgrade, keep, replace or retire each patch explicitly. Never regenerate a custom migration that has already run against a real database.

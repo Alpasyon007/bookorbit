@@ -62,13 +62,13 @@ The gate verifies a clean database install, not every previous custom database u
 
 ### Portable patch boundaries
 
-| Fork-owned boundary                           | Purpose                                            | Upstream dependency to check on upgrade                         |
-| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
-| `.github/workflows/fork-checks.yml`           | Check orchestration and image verification         | Package scripts, E2E suite IDs and Dockerfile                   |
-| `.github/workflows/custom-image.yml`          | Tag-only publication of the tested artifact        | Reusable workflow outputs and Docker image labels               |
-| `.github/actions/fork-setup/action.yml`       | Thin toolchain adapter                             | Manifest pin, Docker base declaration and upstream setup action |
-| `scripts/fork/`                               | Gate logic and disposable-container smoke contract | Public authentication, library and app-info API contracts       |
-| `docs/FORK_WORKFLOW.md`, `docs/PATCH_PLAN.md` | Porting procedure and patch inventory              | Current stable base and retained patch decisions                |
+| Fork-owned boundary                           | Purpose                                            | Upstream dependency to check on upgrade                   |
+| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------- |
+| `.github/workflows/fork-checks.yml`           | Check orchestration and image verification         | Package scripts, E2E suite IDs and Dockerfile             |
+| `.github/workflows/custom-image.yml`          | Tag-only publication of the tested artifact        | Reusable workflow outputs and Docker image labels         |
+| `.github/actions/fork-setup/action.yml`       | Thin toolchain adapter                             | Manifest pin and Docker base declaration                  |
+| `scripts/fork/`                               | Gate logic and disposable-container smoke contract | Public authentication, library and app-info API contracts |
+| `docs/FORK_WORKFLOW.md`, `docs/PATCH_PLAN.md` | Porting procedure and patch inventory              | Current stable base and retained patch decisions          |
 
 No upstream workflow, package script, Dockerfile or application source file is changed by this foundation. Reapply the fork-owned files together, then run the checks on the new base. A changed toolchain declaration or API contract should fail visibly so the small adapter or smoke contract can be reviewed.
 

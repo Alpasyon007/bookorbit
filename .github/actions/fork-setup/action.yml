@@ -1,5 +1,5 @@
 name: Fork toolchain
-description: Reuse upstream setup with versions read from the checked-out release.
+description: Install the toolchain declared by the checked-out upstream release.
 
 runs:
   using: composite
@@ -17,8 +17,30 @@ runs:
         appendFileSync(process.env.GITHUB_OUTPUT, `pnpm=${pnpm}\nnode=${node}\n`);
         NODE
 
-    - name: Set up release dependencies
-      uses: ./.github/actions/setup-node-pnpm
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ steps.versions.outputs.node }}
-        pnpm-version: ${{ steps.versions.outputs.pnpm }}
+
+    - name: Install pinned pnpm
+      shell: bash
+      env:
+        PNPM_VERSION: ${{ steps.versions.outputs.pnpm }}
+      run: npm install --global "pnpm@$PNPM_VERSION"
+
+    - name: Resolve pnpm cache
+      id: store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache dependencies
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: fork-${{ runner.os }}-node-${{ steps.versions.outputs.node }}-pnpm-${{ steps.versions.outputs.pnpm }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Install release dependencies
+      shell: bash
+      env:
+        ONNXRUNTIME_NODE_INSTALL: skip
+      run: pnpm install --frozen-lockfile
