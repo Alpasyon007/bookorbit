@@ -72,6 +72,8 @@ The gate verifies a clean database install, not every previous custom database u
 
 No upstream workflow, package script, Dockerfile or application source file is changed by this foundation. Reapply the fork-owned files together, then run the checks on the new base. A changed toolchain declaration or API contract should fail visibly so the small adapter or smoke contract can be reviewed.
 
+The v3.8.0 authorization test inventory omits `POST /admin/download-clients/validate`. A separate compatibility patch adds `server/test/e2e/authorization-matrix/route-inventory/routes-fork.json` and registers it through the inventory manifest. It preserves the existing parity assertion and adds the route to the permission/API-key probes. On each upstream upgrade, check whether upstream now inventories the route; if so, drop the fork chunk and its manifest registration. Do not add it to the uncovered-route baseline or skip the failing test.
+
 For future product patches, keep implementation in a named feature/service/composable and use the owning module's exported interface. Prefer existing HTTP metadata providers or indexer plugins for source integrations. Keep upstream wiring changes small and identifiable; avoid copying whole upstream components or querying another module's database internals. Preserve shared types, ownership/permission checks and stable persisted IDs. Each patch needs its own acceptance tests and a ledger entry describing its injection points. Do not introduce a general plugin framework until an actual feature requires it.
 
 Use Node >=24 and the pinned `pnpm@11.28.9`; upstream CI and Docker use Node 26. Run from the repository root:

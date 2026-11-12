@@ -113,3 +113,5 @@ Acceptance tests must cover duplicate clicks/concurrent submissions, two users r
 | Durable series tracking              | Optional later feature                                       | Yes                 | Migration/restore/restart tests                                                  |
 
 For each implemented product patch, record its commit, acceptance example, exact test command and upstream status. At every release upgrade, keep, replace or retire each patch explicitly. Never regenerate a custom migration that has already run against a real database.
+
+Compatibility patch: v3.8.0's authorization inventory misses `POST /admin/download-clients/validate`. The fork-owned `routes-fork.json` chunk and small manifest registration add this existing route to the `ManageAppSettings` and write-API-key checks. Validate with `pnpm run e2e:run -- authorization-matrix --passWithNoTests=false`. This changes test metadata only, has no migration, and should be dropped when upstream inventories the route.
