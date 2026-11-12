@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import type { ReleaseNote, ReleaseNotesResponse } from '@bookorbit/types';
 
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
+import { parseUpstreamBaseVersion } from '../../common/utils/upstream-version.utils';
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { parseHighlights, stripHighlightsSection } from './highlights.parser';
 import {
@@ -31,10 +32,11 @@ export class ReleaseNotesService {
   async getSince(since: string | null): Promise<ReleaseNotesResponse> {
     const all = await this.getPage(1);
     const current = this.config.get<string>('app.version') ?? '';
-    const capByCurrent = SEMVER_RE.test(current);
+    const capByCurrent = parseUpstreamBaseVersion(current) !== null;
 
     const eligible = all.filter((r) => {
       if (r.highlights.length === 0) return false;
+      if (!SEMVER_RE.test(r.version) || !parseUpstreamBaseVersion(r.version)) return false;
       if (since && !this.isNewer(r.version, since)) return false;
       // Never announce versions newer than the running build (not yet installed here).
       if (capByCurrent && this.isNewer(r.version, current)) return false;
@@ -247,8 +249,6 @@ export class ReleaseNotesService {
   }
 
   private parseSemver(version: string): [number, number, number] | null {
-    const parts = version.split('.').map(Number);
-    if (parts.length < 3 || parts.some((p) => isNaN(p))) return null;
-    return [parts[0], parts[1], parts[2]];
+    return parseUpstreamBaseVersion(version);
   }
 }

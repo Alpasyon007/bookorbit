@@ -14,6 +14,10 @@ function isVersionTag(value: string): boolean {
   return /^v\d+\.\d+\.\d+$/.test(value)
 }
 
+function isCustomVersionTag(value: string): boolean {
+  return /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-custom\.[1-9]\d*$/.test(value)
+}
+
 function extractSha(value: string): string | null {
   const match = value.match(/^(?:sha-)?([0-9a-f]{7,40})$/i)
   return match ? (match[1] ?? null) : null
@@ -33,7 +37,7 @@ export function buildSidebarVersionUi(version: string, updateAvailable: boolean 
   const currentIsTag = isVersionTag(currentRaw)
   const currentSha = extractSha(currentRaw)
   const currentLabelBase = normalizeVersionLabel(currentRaw)
-  const showUpdate = Boolean(updateAvailable && latestRaw && currentLabelBase && currentIsTag)
+  const showUpdate = Boolean(updateAvailable && latestRaw && currentLabelBase && (currentIsTag || isCustomVersionTag(currentRaw)))
 
   return {
     currentLabel: currentLabelBase,

@@ -4,9 +4,10 @@ import { ConfigService } from '@nestjs/config';
 import { SERVER_FEATURES, type AppInfoResponse } from '@bookorbit/types';
 
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
+import { parseUpstreamBaseVersion } from '../../common/utils/upstream-version.utils';
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { ServerIdentityService } from '../server-identity/server-identity.service';
-import { GITHUB_RELEASES_API, SEMVER_RE, UPDATE_CHECK_TIMEOUT_MS } from './app-info.constants';
+import { GITHUB_RELEASES_API, UPDATE_CHECK_TIMEOUT_MS } from './app-info.constants';
 
 @Injectable()
 export class AppInfoService implements OnApplicationBootstrap {
@@ -25,7 +26,7 @@ export class AppInfoService implements OnApplicationBootstrap {
     const version = this.config.get<string>('app.version') ?? 'Local build';
     const enabled = await this.appSettingsService.isUpdateCheckEnabled();
 
-    if (!enabled || !SEMVER_RE.test(version)) {
+    if (!enabled || !parseUpstreamBaseVersion(version)) {
       return;
     }
 
@@ -36,7 +37,7 @@ export class AppInfoService implements OnApplicationBootstrap {
   async getAppInfo(): Promise<AppInfoResponse> {
     const version = this.config.get<string>('app.version') ?? 'Local build';
     const enabled = await this.appSettingsService.isUpdateCheckEnabled();
-    if (enabled && SEMVER_RE.test(version)) {
+    if (enabled && parseUpstreamBaseVersion(version)) {
       const now = Date.now();
       if (now - this.lastCheckTime > 600_000) {
         this.lastCheckTime = now;
@@ -129,7 +130,7 @@ export class AppInfoService implements OnApplicationBootstrap {
     if (typeof data !== 'object' || data === null) return null;
     const record = data as Record<string, unknown>;
     const tagName = record['tag_name'];
-    if (typeof tagName !== 'string' || !SEMVER_RE.test(tagName)) return null;
+    if (typeof tagName !== 'string' || !parseUpstreamBaseVersion(tagName)) return null;
     return tagName;
   }
 
@@ -143,8 +144,6 @@ export class AppInfoService implements OnApplicationBootstrap {
   }
 
   private parseSemver(version: string): [number, number, number] | null {
-    const parts = version.split('.').map(Number);
-    if (parts.length < 3 || parts.some((p) => isNaN(p))) return null;
-    return [parts[0], parts[1], parts[2]];
+    return parseUpstreamBaseVersion(version);
   }
 }
