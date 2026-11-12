@@ -13,55 +13,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build and Push
+  checks:
     if: github.repository != 'bookorbit/bookorbit'
+    uses: ./.github/workflows/fork-checks.yml
+
+  publish:
+    name: Publish verified image
+    needs: checks
+    if: github.repository != 'bookorbit/bookorbit' && needs.checks.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Resolve image name
+      - name: Download this run's tested image
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.checks.outputs.image-artifact }}
+          path: ${{ runner.temp }}/verified-image
+      - name: Verify image identity and release tag
         id: meta
-        shell: bash
         env:
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          EXPECTED_ID: ${{ needs.checks.outputs.image-id }}
         run: |
           set -euo pipefail
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Custom image tags must use vMAJOR.MINOR.PATCH.BUILD."
-            exit 1
-          fi
-          echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test -n "$EXPECTED_ID"
+          docker load --input "$RUNNER_TEMP/verified-image/fork-image.tar.gz"
+          IMAGE="bookorbit-checked:${COMMIT}"
+          test "$(docker image inspect --format '{{.Id}}' "$IMAGE")" = "$EXPECTED_ID"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "$COMMIT"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$IMAGE")" = "$TAG"
+          TARGET="ghcr.io/${REPO,,}:${TAG#v}"
+          docker tag "$IMAGE" "$TARGET"
+          echo "image=$TARGET" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR after verification
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
-          build-args: APP_VERSION=${{ github.ref_name }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          password: ${{ github.token }}
+      - name: Publish the tested image
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: docker push "$IMAGE"

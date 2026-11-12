@@ -1,0 +1,230 @@
+name: Fork Checks
+
+on:
+  push:
+    branches: ["codex/**", "custom/**", "BO-*-*"]
+  pull_request:
+    branches: ["codex/custom-*", "custom/**"]
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      image-artifact:
+        description: Archive containing the tested image from this run.
+        value: ${{ jobs.image.outputs.artifact }}
+      image-id:
+        description: Docker image ID verified by the smoke test.
+        value: ${{ jobs.image.outputs.image-id }}
+
+permissions:
+  contents: read
+
+jobs:
+  context:
+    if: github.repository != 'bookorbit/bookorbit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Resolve build version
+        id: meta
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" == tag ]]; then
+            if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Custom image tags must use vMAJOR.MINOR.PATCH.BUILD."
+              exit 1
+            fi
+            echo "version=$REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=sha-${COMMIT}" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    name: Lint, types, unit tests and builds
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up release toolchain
+        uses: ./.github/actions/fork-setup
+      - name: Check fork formatting and safety tests
+        run: |
+          pnpm exec prettier --check .github/workflows/fork-checks.yml .github/workflows/custom-image.yml .github/actions/fork-setup/action.yml scripts/fork docs/FORK_WORKFLOW.md docs/PATCH_PLAN.md
+          node --test scripts/fork/*.test.mjs
+      - name: Validate fork workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= .github/workflows/fork-checks.yml .github/workflows/custom-image.yml
+      - name: Verify application
+        run: pnpm run verify
+      - name: Build client
+        run: pnpm run build:client
+      - name: Build server
+        run: pnpm run build:server
+
+  e2e:
+    name: E2E (${{ matrix.suite }})
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [book-api-contract, authorization-matrix]
+    env:
+      E2E_DATABASE_URL: postgres://bookorbit:bookorbit@localhost:5432/bookorbit_e2e
+      NODE_ENV: test
+      JWT_SECRET: fork-e2e-disposable-secret
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      BOOKS_PATH: ../local/data
+      APP_URL: http://localhost:6263
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: bookorbit
+          POSTGRES_PASSWORD: bookorbit
+          POSTGRES_DB: bookorbit
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U bookorbit"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up release toolchain
+        uses: ./.github/actions/fork-setup
+      - name: Run database E2E suite
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: pnpm run e2e:run -- "$SUITE" --passWithNoTests=false
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fork-e2e-${{ matrix.suite }}-${{ github.run_attempt }}
+          path: test-results/server
+          if-no-files-found: ignore
+          retention-days: 7
+
+  image:
+    name: Build and smoke-test image
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      artifact: ${{ steps.archive.outputs.artifact }}
+      image-id: ${{ steps.build.outputs.imageid }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: bookorbit
+          POSTGRES_PASSWORD: bookorbit
+          POSTGRES_DB: bookorbit_smoke
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U bookorbit -d bookorbit_smoke"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+      - name: Build without publishing
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          platforms: linux/amd64
+          tags: bookorbit-checked:${{ github.sha }}
+          build-args: APP_VERSION=${{ needs.context.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.context.outputs.version }}
+          cache-from: type=gha,scope=fork-app-amd64
+          cache-to: type=gha,mode=max,scope=fork-app-amd64
+      - name: Smoke-test production entrypoint and API
+        env:
+          IMAGE: bookorbit-checked:${{ github.sha }}
+          FORK_SMOKE_VERSION: ${{ needs.context.outputs.version }}
+          FORK_SMOKE_BASE_URL: http://127.0.0.1:3000
+          SETUP_BOOTSTRAP_TOKEN: fork-smoke-disposable-setup-token
+        run: |
+          docker run --detach --name bookorbit-fork-smoke --network host \
+            -e DATABASE_URL=postgres://bookorbit:bookorbit@127.0.0.1:5432/bookorbit_smoke \
+            -e JWT_SECRET=fork-smoke-disposable-jwt-secret \
+            -e SETUP_BOOTSTRAP_TOKEN \
+            -e APP_URL=http://127.0.0.1:3000 \
+            -e CLIENT_URL=http://127.0.0.1:3000 \
+            "$IMAGE"
+          node scripts/fork/smoke-image.mjs
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs bookorbit-fork-smoke || true
+      - name: Remove disposable app container
+        if: always()
+        run: docker rm --force --volumes bookorbit-fork-smoke || true
+      - name: Archive the tested release image
+        id: archive
+        if: github.ref_type == 'tag'
+        env:
+          IMAGE: bookorbit-checked:${{ github.sha }}
+          ARTIFACT: fork-image-${{ github.sha }}-${{ github.run_attempt }}
+        run: |
+          docker save "$IMAGE" | gzip -1 > "$RUNNER_TEMP/fork-image.tar.gz"
+          echo "artifact=$ARTIFACT" >> "$GITHUB_OUTPUT"
+      - name: Upload the tested release image
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.archive.outputs.artifact }}
+          path: ${{ runner.temp }}/fork-image.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  gate:
+    name: Fork checks passed
+    if: always() && github.repository != 'bookorbit/bookorbit'
+    needs: [context, verify, e2e, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require every check to succeed
+        env:
+          CHECK_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/fork/check-gate.mjs

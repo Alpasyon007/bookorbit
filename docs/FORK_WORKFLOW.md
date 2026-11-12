@@ -42,7 +42,37 @@ Do not use suffixes such as `v3.8.0-custom.1` with the current parsers. The upda
 
 Pushing a tag matching `v*.*.*.*` runs `.github/workflows/custom-image.yml`. It validates four numeric components, builds the `Dockerfile` with `APP_VERSION` set to the tag, and publishes `ghcr.io/alpasyon007/bookorbit:<version>` with fork source and commit labels. Branch pushes do not publish an image.
 
-The inherited workflow builds the app for **linux/amd64 only**. It does not yet run lint, type checks, or tests. Complete the validation below before tagging; the first planned infrastructure patch adds an automated gate. Add arm64 only if the deployment host needs it. The read-aloud worker is a separate image: while unmodified, pin `READ_ALOUD_WORKER_IMAGE=ghcr.io/bookorbit/bookorbit-read-aloud-worker:3.8.0` when using that optional service.
+The workflow builds the app for **linux/amd64 only**. Publishing depends on the reusable fork checks passing for the exact tagged commit. Add arm64 only if the deployment host needs it. The read-aloud worker is a separate image: while unmodified, pin `READ_ALOUD_WORKER_IMAGE=ghcr.io/bookorbit/bookorbit-read-aloud-worker:3.8.0` when using that optional service.
+
+### Automated publishing gate
+
+`.github/workflows/fork-checks.yml` runs for `codex/**`, `custom/**` and `BO-*-*` branch pushes, PRs targeting a patch branch, and manual runs. `custom-image.yml` calls that same workflow when a four-part release tag is pushed. A [local reusable workflow reference](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#calling-a-reusable-workflow) uses the caller's commit; every checkout explicitly uses `github.sha`.
+
+The required checks are:
+
+1. Frozen dependency installation using the Node version from `Dockerfile` and pnpm pin from `package.json`.
+2. Fork formatting, workflow validation and failure-path tests; application lint, type checks, unit tests, and client/server production builds.
+3. `book-api-contract` and `authorization-matrix` E2E suites, each using its own disposable PostgreSQL 18/pgvector service. Empty test selections fail.
+4. Build the production image without publishing, then run its real entrypoint against a fresh disposable database. Verify migration/startup, initial setup, login/session, empty library browsing/search, app version, and built client assets.
+5. A final gate requires every job to report `success`. Failed, cancelled, skipped or missing checks block publication.
+
+On a release tag, the smoke-tested image is saved as a one-day artifact. Only after the gate passes can the separate publishing job download that run's archive, verify the Docker image ID and revision/version labels, log in to GHCR and push it. There is no second build. Verification jobs have only `contents: read`; only publishing receives `packages: write`. Branch and PR runs cannot publish. No manual publish bypass is provided.
+
+The gate verifies a clean database install, not every previous custom database upgrade. Continue testing restored production backups before deploying schema changes. Add feature-specific E2E suites to the fork matrix when a patch needs them; the baseline matrix does not replace Kobo, metadata or request-specific coverage.
+
+### Portable patch boundaries
+
+| Fork-owned boundary                           | Purpose                                            | Upstream dependency to check on upgrade                         |
+| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
+| `.github/workflows/fork-checks.yml`           | Check orchestration and image verification         | Package scripts, E2E suite IDs and Dockerfile                   |
+| `.github/workflows/custom-image.yml`          | Tag-only publication of the tested artifact        | Reusable workflow outputs and Docker image labels               |
+| `.github/actions/fork-setup/action.yml`       | Thin toolchain adapter                             | Manifest pin, Docker base declaration and upstream setup action |
+| `scripts/fork/`                               | Gate logic and disposable-container smoke contract | Public authentication, library and app-info API contracts       |
+| `docs/FORK_WORKFLOW.md`, `docs/PATCH_PLAN.md` | Porting procedure and patch inventory              | Current stable base and retained patch decisions                |
+
+No upstream workflow, package script, Dockerfile or application source file is changed by this foundation. Reapply the fork-owned files together, then run the checks on the new base. A changed toolchain declaration or API contract should fail visibly so the small adapter or smoke contract can be reviewed.
+
+For future product patches, keep implementation in a named feature/service/composable and use the owning module's exported interface. Prefer existing HTTP metadata providers or indexer plugins for source integrations. Keep upstream wiring changes small and identifiable; avoid copying whole upstream components or querying another module's database internals. Preserve shared types, ownership/permission checks and stable persisted IDs. Each patch needs its own acceptance tests and a ledger entry describing its injection points. Do not introduce a general plugin framework until an actual feature requires it.
 
 Use Node >=24 and the pinned `pnpm@11.28.9`; upstream CI and Docker use Node 26. Run from the repository root:
 
@@ -103,9 +133,9 @@ Only unpublished, unapplied custom migrations may be regenerated. For a migratio
 
 ## Upstream workflows
 
-The upstream workflows are left untouched to reduce upgrade conflicts. On 12 November 2026, the fork's Actions API reported Actions enabled but **zero registered workflows**. That does not prove individual upstream workflows are disabled, and hosted custom builds have not been exercised.
+The upstream workflows are left untouched to reduce upgrade conflicts. Before the foundation rollout on 12 November 2026, the fork's Actions API reported Actions enabled but **zero registered workflows**. That did not prove individual upstream workflows were disabled.
 
-Before enabling hosted builds or pushing the `main` mirror, inspect `gh workflow list --all --repo Alpasyon007/bookorbit`. Keep upstream publishing, release, translation, chart, and issue-maintenance workflows disabled on the fork. Enable `Custom Image` and the planned fork checks explicitly. Keep quality checks available; do not disable all CI without a replacement. Upstream `CI` targets `main`, so it currently provides no automatic checks for the custom branch. Do not push all upstream tags just to publish a patch release.
+Before enabling hosted builds or pushing the `main` mirror, inspect `gh workflow list --all --repo Alpasyon007/bookorbit`. Keep upstream publishing, release, translation, chart, and issue-maintenance workflows disabled on the fork. Enable `Custom Image` and `Fork Checks` explicitly. Keep quality checks available; do not disable all CI without a replacement. Upstream `CI` targets `main`; `Fork Checks` provides checks for the patch branches. Do not push all upstream tags just to publish a patch release.
 
 ## Licence obligations
 

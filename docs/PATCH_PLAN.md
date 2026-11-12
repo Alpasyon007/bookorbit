@@ -19,15 +19,16 @@ Keep one concern per commit and one feature per branch. Do not mix sidebar chang
 
 ## 0. Build and verification foundation
 
-The inherited Custom Image workflow publishes an amd64 app image on four-part tags such as `v3.8.0.1`. It now rejects malformed tags and labels images with the fork source and commit. No image has been published by this update.
+The Custom Image workflow publishes an amd64 app image on four-part tags such as `v3.8.0.1`. The build foundation is implemented in fork-owned workflows, a thin setup action and `scripts/fork/`; it does not modify upstream application code or workflows. See the [automated gate and portability boundaries](FORK_WORKFLOW.md#automated-publishing-gate).
 
-Before the first product release:
+Implemented checks:
 
-1. Add fork-only checks for pushes to the maintained patch branch and PRs targeting it. Use a reusable workflow so the tag publishing job checks the exact tagged commit with the same commands.
-2. Install using the repository's pinned pnpm version and `--frozen-lockfile`. Run `pnpm run verify`, client/server builds, and relevant E2E suites. Keep package publishing permissions out of the verification job.
-3. Make the image build depend on successful checks. Keep publishing restricted to explicit four-part tags in this fork; keep upstream release and scheduled maintenance automation disabled.
-4. Confirm host architecture before selecting amd64 or a native amd64/arm64 build matrix. Build the optional read-aloud worker separately only when changing it; otherwise pin its upstream release image.
-5. Test startup, migration, login, library search and the changed features against disposable data. Test upgrading a restored copy of the previous database before deploying.
+1. The reusable `Fork Checks` workflow runs on patch branch pushes/PRs and on the exact release-tag commit before publication.
+2. Dependencies use the checked-out release's pinned versions and frozen lockfile. Checks run `pnpm run verify`, production builds, fork safety tests and workflow validation.
+3. Database E2E checks cover the book API contract and authorization matrix. The built container is smoke-tested against its own disposable database, including migration, setup, login, browsing and client assets.
+4. The final gate rejects failed, cancelled, skipped or missing checks. Publishing loads the saved tested image and verifies its identity before receiving registry credentials; it never rebuilds the image.
+
+Before deployment, confirm the host supports the current amd64 build and test the upgrade on a restored copy of the previous database. Add a native arm64 build only when needed. Build the optional read-aloud worker separately only when changing it; otherwise pin its upstream release image. Add feature-specific E2E suites alongside each future product patch.
 
 Current package pin is `pnpm@11.28.9`, minimum Node is 24, and upstream CI/Docker use Node 26. The repository instructions contain some older tooling descriptions; use the checked-in manifests for installation. E2E commands and supported suites live in `scripts/e2e/suite-registry.mjs`.
 
@@ -100,15 +101,15 @@ Acceptance tests must cover duplicate clicks/concurrent submissions, two users r
 
 ## Patch ledger
 
-| Patch                                | Status                                                      | Migration           | Verification                                                                 |
-| ------------------------------------ | ----------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------- |
-| Fork workflow documentation          | Carried from `c837937b`; updated for v3.8.0                 | None                | Documentation and Git ancestry                                               |
-| Custom Image workflow                | Carried from `ca689ba6`; numeric tags and fork labels added | None                | Formatting, workflow parsing and tag-validation checks; hosted build pending |
-| Fork checks and publish gate         | Planned, before first product release                       | None                | Successful checks on the exact tagged commit                                 |
-| Sidebar improvement                  | Planned; exact UI change to choose                          | Probably none       | Sidebar component/composable tests and responsive review                     |
-| Additional metadata provider         | Planned; source to choose                                   | None in BookOrbit   | Provider contract fixtures and integration tests                             |
-| Cover drawer provider integration    | Optional follow-up                                          | Probably none       | Cover API/DTO/preferences/UI tests                                           |
-| Series preview and selected requests | Planned; catalogue source to choose                         | None for capped MVP | Request and authorization tests                                              |
-| Durable series tracking              | Optional later feature                                      | Yes                 | Migration/restore/restart tests                                              |
+| Patch                                | Status                                                      | Migration           | Verification                                                                     |
+| ------------------------------------ | ----------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------- |
+| Fork workflow documentation          | Carried from `c837937b`; updated for v3.8.0                 | None                | Documentation and Git ancestry                                                   |
+| Custom Image workflow                | Carried from `ca689ba6`; numeric tags and fork labels added | None                | Formatting, workflow parsing and tag-validation checks; hosted build pending     |
+| Fork checks and publish gate         | Implemented in fork-owned workflows/action/scripts          | None                | Failure-path tests, E2E, builds and container smoke checks gate the exact commit |
+| Sidebar improvement                  | Planned; exact UI change to choose                          | Probably none       | Sidebar component/composable tests and responsive review                         |
+| Additional metadata provider         | Planned; source to choose                                   | None in BookOrbit   | Provider contract fixtures and integration tests                                 |
+| Cover drawer provider integration    | Optional follow-up                                          | Probably none       | Cover API/DTO/preferences/UI tests                                               |
+| Series preview and selected requests | Planned; catalogue source to choose                         | None for capped MVP | Request and authorization tests                                                  |
+| Durable series tracking              | Optional later feature                                      | Yes                 | Migration/restore/restart tests                                                  |
 
 For each implemented product patch, record its commit, acceptance example, exact test command and upstream status. At every release upgrade, keep, replace or retire each patch explicitly. Never regenerate a custom migration that has already run against a real database.

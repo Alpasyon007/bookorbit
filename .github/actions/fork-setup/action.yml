@@ -1,0 +1,24 @@
+name: Fork toolchain
+description: Reuse upstream setup with versions read from the checked-out release.
+
+runs:
+  using: composite
+  steps:
+    - name: Read release toolchain
+      id: versions
+      shell: bash
+      run: |
+        node --input-type=module <<'NODE'
+        import { readFileSync, appendFileSync } from 'node:fs';
+        const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+        const pnpm = /^pnpm@(\d+\.\d+\.\d+)(?:\+.*)?$/.exec(manifest.packageManager)?.[1];
+        const node = /^ARG NODE_IMAGE=node:(\d+\.\d+\.\d+)-/m.exec(readFileSync('Dockerfile', 'utf8'))?.[1];
+        if (!pnpm || !node) throw new Error('Review the fork toolchain adapter for this upstream release');
+        appendFileSync(process.env.GITHUB_OUTPUT, `pnpm=${pnpm}\nnode=${node}\n`);
+        NODE
+
+    - name: Set up release dependencies
+      uses: ./.github/actions/setup-node-pnpm
+      with:
+        node-version: ${{ steps.versions.outputs.node }}
+        pnpm-version: ${{ steps.versions.outputs.pnpm }}
