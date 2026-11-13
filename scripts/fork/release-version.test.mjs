@@ -2,12 +2,27 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { parseCustomVersion } from "./release-version.mjs";
+import { compareCustomVersions, parseCustomVersion } from "./release-version.mjs";
 
 test("identifies the upstream base separately from the custom revision", () => {
   assert.deepEqual(parseCustomVersion("v3.8.0-custom.1"), { version: "v3.8.0-custom.1", upstreamVersion: "v3.8.0", revision: 1 });
   assert.equal(parseCustomVersion("v3.9.1-custom.12").revision, 12);
 });
+
+for (const [candidate, current, expected] of [
+  ["v3.8.0-custom.2", "v3.8.0-custom.1", 1],
+  ["v3.8.0-custom.10", "v3.8.0-custom.9", 1],
+  ["v3.8.1-custom.1", "v3.8.0-custom.99", 1],
+  ["v3.10.0-custom.1", "v3.9.99-custom.99", 1],
+  ["v4.0.0-custom.1", "v3.99.99-custom.99", 1],
+  ["v3.8.0-custom.1", "v3.8.0-custom.1", 0],
+  ["v3.8.0-custom.1", "v3.8.0-custom.2", -1],
+  ["v3.8.0-custom.99", "v3.8.1-custom.1", -1],
+]) {
+  test(`orders ${candidate} against ${current}`, () => assert.equal(compareCustomVersions(candidate, current), expected));
+}
+
+test("comparison rejects unknown current versions", () => assert.throws(() => compareCustomVersions("v3.8.0-custom.2", "dev")));
 
 for (const value of [
   "v3.8.0",

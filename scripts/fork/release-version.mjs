@@ -8,6 +8,19 @@ export function parseCustomVersion(version) {
   return { version, upstreamVersion: `v${match[1]}.${match[2]}.${match[3]}`, revision: Number(match[4]) };
 }
 
+export function compareCustomVersions(candidate, current) {
+  const parts = (version) => {
+    const parsed = parseCustomVersion(version);
+    return [...parsed.upstreamVersion.slice(1).split(".").map(Number), parsed.revision];
+  };
+  const left = parts(candidate);
+  const right = parts(current);
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return left[index] > right[index] ? 1 : -1;
+  }
+  return 0;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     if (process.argv.length !== 3) throw new Error("Pass exactly one custom release tag");

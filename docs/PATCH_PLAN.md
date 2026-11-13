@@ -2,7 +2,7 @@
 
 Baseline: upstream `v3.8.0` (`450c18e2`), published 11 November 2026. Working branch: `codex/custom-3.8`. Reviewed 12 November 2026.
 
-The source upgrade preserves the previous fork documentation and image workflow. Product patches are proposed here, not implemented. The requested areas are sidebar UI, additional metadata/cover sources, and richer requests such as requesting a book series. Exact layouts and source providers remain choices for the first implementation task.
+The source upgrade preserves the previous fork documentation and image workflow. Custom version handling and bundled What's New entries are implemented. The proposed product areas remain sidebar UI, additional metadata/cover sources, and richer requests such as requesting a book series. Exact layouts and source providers remain choices for those implementation tasks.
 
 ## Recommended order
 
@@ -114,6 +114,10 @@ Acceptance tests must cover duplicate clicks/concurrent submissions, two users r
 
 For each implemented product patch, record its commit, acceptance example, exact test command and upstream status. At every release upgrade, keep, replace or retire each patch explicitly. Never regenerate a custom migration that has already run against a real database.
 
-Version-label patch: `upstream-version.utils.ts` is the shared server adapter, injected into app-info and release-notes. The sidebar's `versionUi.ts` also recognizes custom versions for update indicators. The patch displays `v3.8.0-custom.1` while comparing against upstream `v3.8.0`, and needs no migration. Its utility tests and separate fork-version tests cover same-base, newer-base, malformed labels, release-note caps and update indicators. Port it independently of the CI foundation.
+Version-label patch: `upstream-version.utils.ts` is the shared server adapter, injected into app-info and release-notes. The sidebar's `versionUi.ts` also recognizes custom versions for update indicators. The patch displays the complete custom label while comparing against upstream `v3.8.0`, and needs no migration. Its utility tests and separate fork-version tests cover same-base, newer-base, malformed labels, release-note caps and update indicators. Port it independently of the CI foundation.
+
+Custom release-note patch: the server's `release-notes/custom-releases/` catalog and helper add descriptions of our revisions to the existing API. A small client comparator hook makes custom revision upgrades visible through the existing per-user unread/popup flow. Notes are bundled, available without GitHub access, capped at the installed custom version and paginated alongside upstream notes. Add a catalog entry for every new custom tag. Regression tests cover API filtering/paging/offline behavior and client acknowledgement/user switching; container smoke checks require meaningful notes for the tagged image. No shared contract or database migration changes are needed.
+
+Latest-image alias: the publishing helper promotes `latest` only after the same image passes all checks and its versioned push is verified. Serialized promotion compares numeric custom versions, retains a newer alias, rejects equal-version identity changes and verifies the registry digest. The workflow and helper tests can be ported independently of the runtime release-note patch.
 
 Compatibility patch: v3.8.0's authorization inventory misses `POST /admin/download-clients/validate`. The fork-owned `routes-fork.json` chunk and small manifest registration add this existing route to the `ManageAppSettings` and write-API-key checks. Validate with `pnpm run e2e:run -- authorization-matrix --passWithNoTests=false`. This changes test metadata only, has no migration, and should be dropped when upstream inventories the route.

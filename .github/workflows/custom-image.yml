@@ -23,6 +23,9 @@ jobs:
     if: github.repository != 'bookorbit/bookorbit' && needs.checks.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: custom-image-publish-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -67,13 +70,9 @@ jobs:
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           EXPECTED_ID: ${{ needs.checks.outputs.image-id }}
+          TAG: ${{ github.ref_name }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          docker push "$IMAGE"
-          docker pull "$IMAGE"
-          test "$(docker image inspect --format '{{.Id}}' "$IMAGE")" = "$EXPECTED_ID"
-          PUBLISHED_REF=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" | grep -F "${IMAGE%:*}@" | head -n 1)
-          test -n "$PUBLISHED_REF"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-          echo "digest-ref=$PUBLISHED_REF" >> "$GITHUB_OUTPUT"
-          printf '## Verified custom image\n\nImage: `%s`\n\nDigest: `%s`\n' "$IMAGE" "$PUBLISHED_REF" >> "$GITHUB_STEP_SUMMARY"
+          node scripts/fork/publish-image.mjs
