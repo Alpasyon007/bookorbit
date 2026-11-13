@@ -202,7 +202,7 @@ describe('ProviderConfigService', () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: { me: [{ username: 'reader' }] },
+          data: { search: { error: null, ids: [] }, series: [] },
         }),
         { status: 200 },
       ),
@@ -268,7 +268,7 @@ describe('ProviderConfigService', () => {
     );
 
     await expect(service.updateConfig({ hardcover: { enabled: true, apiKey: 'invalid-token' } })).rejects.toThrow(
-      'Hardcover API error: Malformed Authorization header',
+      'Hardcover catalog validation failed. Check the token and catalog permissions.',
     );
     expect(db.__tx.insert).not.toHaveBeenCalled();
   });
@@ -498,7 +498,7 @@ describe('ProviderConfigService', () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: { me: [{ username: 'reader' }] },
+          data: { search: { error: null, ids: [] }, series: [] },
         }),
         { status: 200 },
       ),
@@ -512,7 +512,7 @@ describe('ProviderConfigService', () => {
       key: MetadataProviderKey.HARDCOVER,
       ok: true,
       status: 'success',
-      message: 'Connected as reader.',
+      message: 'Hardcover catalog is reachable.',
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.hardcover.app/v1/graphql',
@@ -525,12 +525,62 @@ describe('ProviderConfigService', () => {
     );
   });
 
+  it('accepts an empty catalog-only result without requesting identity', async () => {
+    db.query.appSettings.findFirst.mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { search: { error: null, ids: [] }, series: [] } })));
+    const result = await service.testProvider(MetadataProviderKey.HARDCOVER, { hardcover: { apiKey: 'token-123' } });
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { query: string };
+    expect(request.query).toContain('query_type: "Series"');
+    expect(request.query).toContain('series(limit: 1)');
+    expect(request.query).not.toContain('me {');
+    expect(result).toMatchObject({ ok: true, status: 'success' });
+  });
+
+  it.each([
+    { data: { search: { error: 'private payload', ids: [] }, series: [] } },
+    { data: { search: { error: null, ids: [] } } },
+    { data: { search: { error: null, ids: [] }, series: [] }, errors: [{ message: 'private payload' }] },
+    { data: { search: { error: null, ids: null }, series: [] } },
+  ])('rejects failed or incomplete catalog probes without exposing provider details', async (body) => {
+    db.query.appSettings.findFirst.mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(body)));
+    const result = await service.testProvider(MetadataProviderKey.HARDCOVER, { hardcover: { apiKey: 'token-123' } });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 'fail',
+      message: 'Hardcover catalog validation failed. Check the token and catalog permissions.',
+    });
+    expect(JSON.stringify(result)).not.toContain('private payload');
+  });
+
+  it('reports a rejected catalog token without exposing its response body', async () => {
+    db.query.appSettings.findFirst.mockResolvedValue(undefined);
+    const response = new Response('private token value', { status: 403 });
+    const cancel = vi.spyOn(response.body!, 'cancel');
+    fetchMock.mockResolvedValue(response);
+    const result = await service.testProvider(MetadataProviderKey.HARDCOVER, { hardcover: { apiKey: 'token-123' } });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 'fail',
+      message: 'Hardcover catalog request failed with HTTP 403. Check the token and catalog permissions.',
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain('private token value');
+  });
+
+  it('rejects oversized catalog probe bodies', async () => {
+    db.query.appSettings.findFirst.mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue(new Response('x'.repeat(1024 * 1024 + 1)));
+    const result = await service.testProvider(MetadataProviderKey.HARDCOVER, { hardcover: { apiKey: 'token-123' } });
+    expect(result).toMatchObject({ ok: false, status: 'fail', message: 'Hardcover returned an invalid catalog response.' });
+  });
+
   it('tests Hardcover provider with quoted bearer token input', async () => {
     db.query.appSettings.findFirst.mockResolvedValue(undefined);
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: { me: [{ username: 'reader' }] },
+          data: { search: { error: null, ids: [] }, series: [] },
         }),
         { status: 200 },
       ),

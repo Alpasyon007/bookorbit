@@ -36,6 +36,7 @@ export async function fetchWithThrottle(url: string | URL, options?: RequestInit
   recordProviderRequest(requestKey, { kind: 'status', status: res.status, accepted: egress?.acceptedStatuses?.includes(res.status) === true });
   if (res.status === 429) {
     const retryAfterSeconds = parseRetryAfterSeconds(res.headers.get('Retry-After'));
+    void res.body?.cancel().catch(() => undefined);
     throw new ProviderThrottleError(retryAfterSeconds);
   }
   return res;

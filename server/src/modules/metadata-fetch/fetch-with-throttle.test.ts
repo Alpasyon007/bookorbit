@@ -29,6 +29,14 @@ describe('fetchWithThrottle', () => {
     });
   });
 
+  it('cancels a throttled response body before throwing', async () => {
+    const cancel = vi.fn<() => Promise<void>>().mockResolvedValue();
+    global.fetch = vi.fn().mockResolvedValue({ status: 429, headers: { get: vi.fn().mockReturnValue('3') }, body: { cancel } });
+
+    await expect(fetchWithThrottle('https://provider.example/search')).rejects.toMatchObject({ name: 'ProviderThrottleError', retryAfterSeconds: 3 });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('parses Retry-After HTTP-date headers into remaining seconds', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-08T12:00:00.000Z'));

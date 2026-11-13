@@ -12,6 +12,7 @@ import {
 } from '@bookorbit/types';
 
 import { stripBearerPrefix, toBearerAuthorization } from '../../common/utils/bearer-token.utils';
+import { readBoundedText } from '../../common/utils/bounded-response';
 import { amazonRequestHeaders, isAmazonBotChallenge } from '../../common/utils/amazon-http.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { amazonOrigin, normalizeAmazonDomain, normalizeAudibleDomain } from '../../common/utils/metadata-provider-hosts.utils';
@@ -28,7 +29,11 @@ type ProviderConfigPatch = {
 const PROVIDER_CONFIG_KEY = 'metadata_provider_config';
 const PROVIDER_TEST_EVENT = 'metadata_provider_config.test_provider';
 const HARDCOVER_GRAPHQL_URL = 'https://api.hardcover.app/v1/graphql';
-const HARDCOVER_TEST_QUERY = 'query { me { username } }';
+const HARDCOVER_TEST_QUERY = `query TestHardcoverCatalog {
+  search(query: "Discworld", query_type: "Series", per_page: 1, page: 1) { error ids }
+  series(limit: 1) { id }
+}`;
+const HARDCOVER_TEST_MAX_BYTES = 1024 * 1024;
 const AMAZON_TEST_QUERY = 'books';
 const PROVIDER_TEST_TIMEOUT_MS = 10_000;
 const DEFAULT_CONFIG: ProviderConfigurations = {
@@ -643,36 +648,43 @@ export class ProviderConfigService implements OnModuleInit {
     });
 
     if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined);
       return {
         key: MetadataProviderKey.HARDCOVER,
         ok: false,
         status: 'fail',
-        message: `Hardcover request failed with HTTP ${response.status}.`,
+        message: `Hardcover catalog request failed with HTTP ${response.status}. Check the token and catalog permissions.`,
       };
     }
 
-    const body = (await response.json()) as {
-      data?: { me?: Array<{ username?: string | null }> };
-      errors?: Array<{ message?: string }>;
+    let body: {
+      data?: { search?: { error?: string | null; ids?: unknown }; series?: unknown };
+      errors?: unknown[];
     };
-
-    if (body.errors?.length) {
-      const firstError = body.errors[0]?.message;
-      return {
-        key: MetadataProviderKey.HARDCOVER,
-        ok: false,
-        status: 'fail',
-        message: firstError ? `Hardcover API error: ${firstError}` : 'Hardcover API returned an error.',
-      };
+    try {
+      body = JSON.parse(await readBoundedText(response, HARDCOVER_TEST_MAX_BYTES)) as typeof body;
+    } catch {
+      return { key: MetadataProviderKey.HARDCOVER, ok: false, status: 'fail', message: 'Hardcover returned an invalid catalog response.' };
     }
 
-    const username = body.data?.me?.[0]?.username?.trim();
-    if (!username) {
+    if (
+      !body ||
+      !Array.isArray(body.data?.search?.ids) ||
+      body.data.search.ids.length > 1 ||
+      !body.data.search.ids.every((id: unknown) => Number.isSafeInteger(id) && (id as number) > 0) ||
+      body.data.search.error != null ||
+      !Array.isArray(body.data.series) ||
+      body.data.series.length > 1 ||
+      !body.data.series.every(
+        (row: unknown) => typeof row === 'object' && row !== null && 'id' in row && Number.isSafeInteger(row.id) && (row.id as number) > 0,
+      ) ||
+      (body.errors !== undefined && (!Array.isArray(body.errors) || body.errors.length > 0))
+    ) {
       return {
         key: MetadataProviderKey.HARDCOVER,
         ok: false,
         status: 'fail',
-        message: 'Hardcover token validation failed.',
+        message: 'Hardcover catalog validation failed. Check the token and catalog permissions.',
       };
     }
 
@@ -680,7 +692,7 @@ export class ProviderConfigService implements OnModuleInit {
       key: MetadataProviderKey.HARDCOVER,
       ok: true,
       status: 'success',
-      message: `Connected as ${username}.`,
+      message: 'Hardcover catalog is reachable.',
     };
   }
 }

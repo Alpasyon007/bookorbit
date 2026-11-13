@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import type { SeriesCatalogBook, SeriesCatalogPage, SeriesCatalogSeries } from '@bookorbit/types';
 
 import { readBoundedText } from '../../common/utils/bounded-response';
@@ -6,12 +6,14 @@ import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { toBearerAuthorization } from '../../common/utils/bearer-token.utils';
 import { ProviderConfigService } from '../metadata-preferences/provider-config.service';
 import { fetchWithThrottle } from './fetch-with-throttle';
+import { ProviderThrottleError } from './provider-throttle.error';
 
 const PAGE_SIZE = 25;
 const ENDPOINT = 'https://api.hardcover.app/v1/graphql';
-const SEARCH = `query SeriesSearch($name: String!, $offset: Int!, $limit: Int!) {
-  series(where: {name: {_ilike: $name}, canonical_id: {_is_null: true}}, order_by: [{id: asc}], offset: $offset, limit: $limit) {
-    id name author { name }
+const SEARCH = `query SeriesSearch($name: String!, $page: Int!, $limit: Int!) {
+  search(query: $name, query_type: "Series", page: $page, per_page: $limit) {
+    error
+    results
   }
 }`;
 const MEMBERS = `query SeriesMembers($id: Int!, $offset: Int!, $limit: Int!) {
@@ -23,11 +25,16 @@ const MEMBERS = `query SeriesMembers($id: Int!, $offset: Int!, $limit: Int!) {
   }
 }`;
 
-interface SeriesRow {
-  id: number;
-  name: string;
-  author: { name: string } | null;
+interface SeriesSearchResponse {
+  search?: {
+    error?: string | null;
+    results?: {
+      found?: number;
+      hits?: Array<{ document?: { id?: string | number; name?: string; author_name?: string | null; author?: { name?: string | null } | null } }>;
+    } | null;
+  } | null;
 }
+
 interface MemberRow {
   position: number | null;
   book: {
@@ -38,16 +45,18 @@ interface MemberRow {
   } | null;
 }
 
-function validSeries(row: SeriesRow): boolean {
-  return (
-    !!row &&
-    Number.isSafeInteger(row.id) &&
-    row.id > 0 &&
-    typeof row.name === 'string' &&
-    row.name.trim().length > 0 &&
-    row.name.length <= 500 &&
-    (row.author === null || (typeof row.author === 'object' && typeof row.author.name === 'string' && row.author.name.length <= 255))
-  );
+function seriesFromHit(
+  hit: NonNullable<NonNullable<NonNullable<SeriesSearchResponse['search']>['results']>['hits']>[number],
+): SeriesCatalogSeries | null {
+  const doc = hit?.document;
+  if (!doc || (typeof doc.id !== 'number' && (typeof doc.id !== 'string' || !/^[0-9]+$/.test(doc.id)))) return null;
+  const id = Number(doc.id);
+  if (!Number.isSafeInteger(id) || id < 1 || id > 2147483647 || typeof doc.name !== 'string' || !doc.name.trim() || doc.name.length > 500)
+    return null;
+  if (doc.author_name != null && (typeof doc.author_name !== 'string' || doc.author_name.length > 255)) return null;
+  const author = doc.author_name ?? doc.author?.name;
+  if (author != null && (typeof author !== 'string' || author.length > 255)) return null;
+  return { id, name: doc.name, author: author?.trim() || null };
 }
 
 function validDate(value: unknown): boolean {
@@ -93,14 +102,25 @@ export class SeriesCatalogService {
   constructor(private readonly config: ProviderConfigService) {}
 
   async search(name: string, offset: number): Promise<SeriesCatalogPage<SeriesCatalogSeries>> {
-    const data = await this.query<{ series?: SeriesRow[] }>(
-      SEARCH,
-      { name: `%${name.replace(/[%_\\]/g, '\\$&')}%`, offset, limit: PAGE_SIZE + 1 },
-      (data) => !!data && Array.isArray(data.series) && data.series.length <= PAGE_SIZE + 1 && data.series.every(validSeries),
-    );
-    if (!Array.isArray(data.series) || data.series.length > PAGE_SIZE + 1 || !data.series.every(validSeries))
-      throw new ServiceUnavailableException('Hardcover returned an invalid series search');
-    return this.page(data.series, offset, (row) => ({ id: row.id, name: row.name, author: row.author?.name ?? null }));
+    if (offset % PAGE_SIZE !== 0) throw new BadRequestException('Series search offset must be a multiple of 25');
+    const data = await this.query<SeriesSearchResponse>(SEARCH, { name, page: offset / PAGE_SIZE + 1, limit: PAGE_SIZE }, (data) => {
+      const result = data?.search;
+      const found = result?.results?.found;
+      const hits = result?.results?.hits;
+      return (
+        result?.error == null &&
+        Number.isSafeInteger(found) &&
+        found! >= 0 &&
+        Array.isArray(hits) &&
+        hits.length === Math.min(PAGE_SIZE, Math.max(0, found! - offset)) &&
+        hits.every((hit) => seriesFromHit(hit) !== null)
+      );
+    });
+    const result = data.search!.results!;
+    return {
+      items: result.hits!.map((hit) => seriesFromHit(hit)!),
+      nextOffset: result.found! > offset + PAGE_SIZE ? offset + PAGE_SIZE : null,
+    };
   }
 
   async members(id: number, offset: number): Promise<SeriesCatalogPage<SeriesCatalogBook>> {
@@ -136,7 +156,8 @@ export class SeriesCatalogService {
 
   private async query<T>(query: string, variables: Record<string, unknown>, validate: (data: T) => boolean): Promise<T> {
     const { enabled, apiKey } = (await this.config.getConfig()).hardcover;
-    if (!enabled || !apiKey) throw new ServiceUnavailableException('Enable and configure Hardcover to browse series');
+    if (!enabled || !apiKey)
+      throw new ServiceUnavailableException('Enable and configure Hardcover in Settings > Metadata > Providers to browse series');
     if (this.queued >= 3) throw new ServiceUnavailableException('Hardcover is busy, please retry');
     this.queued++;
     const start = Date.now();
@@ -144,7 +165,10 @@ export class SeriesCatalogService {
     const scheduled = Math.max(start, this.nextRequestAt);
     this.nextRequestAt = scheduled + 1000;
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, scheduled - Date.now())));
-    this.logger.log('[series.catalog] [start] provider=hardcover - catalog query started');
+    const operation = query === SEARCH ? 'search' : 'members';
+    this.logger.log(`[series.catalog] [start] provider=hardcover operation=${operation} - catalog query started`);
+    let failureKind = 'network';
+    let httpStatus: number | undefined;
     try {
       const response = await fetchWithThrottle(ENDPOINT, {
         method: 'POST',
@@ -152,16 +176,35 @@ export class SeriesCatalogService {
         body: JSON.stringify({ query, variables }),
         signal,
       });
-      if (!response.ok) throw new ServiceUnavailableException(`HTTP ${response.status}`);
+      httpStatus = response.status;
+      if (!response.ok) {
+        void response.body?.cancel().catch(() => undefined);
+        failureKind = response.status === 401 || response.status === 403 ? 'authentication' : 'http';
+        if (failureKind === 'authentication')
+          throw new ServiceUnavailableException('Hardcover rejected the configured token or its catalog permissions');
+        throw new ServiceUnavailableException('Hardcover catalog is unavailable');
+      }
+      failureKind = 'invalid_response';
       const body = JSON.parse(await readBoundedText(response, 1024 * 1024)) as { data?: T; errors?: unknown } | null;
       if (!body || !body.data || body.errors || !validate(body.data)) throw new ServiceUnavailableException('Invalid GraphQL response');
-      this.logger.log(`[series.catalog] [end] provider=hardcover durationMs=${Date.now() - start} - catalog query completed`);
+      this.logger.log(`[series.catalog] [end] provider=hardcover operation=${operation} durationMs=${Date.now() - start} - catalog query completed`);
       return body.data;
     } catch (error) {
+      const message =
+        error instanceof ProviderThrottleError
+          ? 'Hardcover rate limit reached. Please retry later'
+          : error instanceof ServiceUnavailableException && error.message === 'Hardcover rejected the configured token or its catalog permissions'
+            ? error.message
+            : 'Hardcover catalog is unavailable';
+      if (error instanceof ProviderThrottleError) {
+        failureKind = 'rate_limit';
+        httpStatus = 429;
+      } else if (signal.aborted) failureKind = 'timeout';
+      const errorClass = error instanceof ProviderThrottleError ? 'ProviderThrottleError' : signal.aborted ? 'TimeoutError' : 'CatalogError';
       this.logger.warn(
-        `[series.catalog] [fail] provider=hardcover durationMs=${Date.now() - start} errorClass=${error instanceof Error ? error.name : 'Unknown'} error="${sanitizeLogValue(error instanceof Error ? error.message : 'Unknown error')}" - catalog query failed`,
+        `[series.catalog] [fail] provider=hardcover operation=${operation} durationMs=${Date.now() - start} failureKind=${failureKind} httpStatus=${httpStatus ?? 'none'} errorClass=${errorClass} error="${sanitizeLogValue(message)}" - catalog query failed`,
       );
-      throw new ServiceUnavailableException('Hardcover catalog is unavailable');
+      throw new ServiceUnavailableException(message);
     } finally {
       this.queued--;
     }
