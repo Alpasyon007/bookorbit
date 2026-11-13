@@ -4,6 +4,7 @@ import { useLibraries } from '@/features/library/composables/useLibraries'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { Permission } from '@bookorbit/types'
 import { requestLanguageOptions, useRequestDestinationDefault, useRequestLanguageDefault } from './useRequestDestinationDefault'
+import { useSeriesBookSelection } from './useSeriesBookSelection'
 import { useI18n } from 'vue-i18n'
 import type {
   BookRequestAvailability,
@@ -29,6 +30,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const searchPageOffset = ref(0)
   const selected = ref<SeriesCatalogSeries | null>(null)
   const books = ref<SeriesCatalogBook[]>([])
+  const selection = useSeriesBookSelection()
   const annotations = ref<BookRequestAvailability[]>([])
   const pageOffset = ref(0)
   const nextOffset = ref<number | null>(null)
@@ -74,6 +76,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const error = ref('')
   const progress = ref('')
   let disposed = false
+  let previewVersion = 0
   onUnmounted(() => {
     disposed = true
   })
@@ -147,25 +150,32 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   }
   async function loadPage(offset: number, preserveError = false) {
     if (!selected.value) return
+    const version = ++previewVersion
+    const seriesId = selected.value.id
+    const kind = mediaKind.value
     busy.value = true
     if (!preserveError) error.value = ''
     try {
-      const page = await readPage<SeriesCatalogBook>(`/api/v1/book-requests/series-catalog/${selected.value.id}?offset=${offset}`, offset)
-      if (disposed) return
-      const availability = page.items.length ? await availabilityFor(page.items, mediaKind.value) : []
-      if (disposed) return
+      const page = await readPage<SeriesCatalogBook>(`/api/v1/book-requests/series-catalog/${seriesId}?offset=${offset}`, offset)
+      if (disposed || version !== previewVersion) return
+      const availability = page.items.length ? await availabilityFor(page.items, kind) : []
+      if (disposed || version !== previewVersion) return
       books.value = page.items
       annotations.value = availability
       previewLoaded.value = true
       pageOffset.value = offset
       nextOffset.value = page.nextOffset
     } catch (e) {
-      if (!disposed && (!preserveError || !error.value)) error.value = e instanceof Error ? e.message : t('bookRequests.series.failed')
+      if (!disposed && version === previewVersion && (!preserveError || !error.value))
+        error.value = e instanceof Error ? e.message : t('bookRequests.series.failed')
     } finally {
-      if (!disposed) busy.value = false
+      if (!disposed && version === previewVersion) busy.value = false
     }
   }
   function clearSelection() {
+    if (busy.value) return
+    previewVersion++
+    selection.reset()
     selected.value = null
     books.value = []
     annotations.value = []
@@ -176,6 +186,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     error.value = ''
   }
   function selectSeries(series: SeriesCatalogSeries) {
+    if (busy.value) return
     clearSelection()
     selected.value = series
     void loadPage(0)
@@ -201,8 +212,48 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
         })),
       }),
     })
-    if (!Array.isArray(result) || result.length !== items.length) throw new Error(t('bookRequests.series.failed'))
+    if (
+      !Array.isArray(result) ||
+      result.length !== items.length ||
+      result.some(
+        (item) =>
+          !item ||
+          typeof item !== 'object' ||
+          !(item.ownedBookId === null || (Number.isSafeInteger(item.ownedBookId) && item.ownedBookId > 0)) ||
+          !(item.existingRequestId === null || (Number.isSafeInteger(item.existingRequestId) && item.existingRequestId > 0)) ||
+          typeof item.alreadySubscribed !== 'boolean' ||
+          !(item.existingRequestStatus === null || typeof item.existingRequestStatus === 'string'),
+      )
+    )
+      throw new Error(t('bookRequests.series.failed'))
     return result
+  }
+  type EligibilityReason = 'upcoming' | 'unknown-date' | 'unavailable' | 'owned' | 'subscribed' | null
+  function eligibilityReason(book: SeriesCatalogBook, status: BookRequestAvailability | undefined): EligibilityReason {
+    if (!book.releaseDate) return 'unknown-date'
+    if (book.releaseDate > new Date().toISOString().slice(0, 10)) return 'upcoming'
+    if (!status) return 'unavailable'
+    if (status.ownedBookId !== null) return 'owned'
+    if (status.alreadySubscribed) return 'subscribed'
+    return null
+  }
+  function bookEligibilityReason(book: SeriesCatalogBook, index: number): EligibilityReason {
+    return eligibilityReason(book, annotations.value[index])
+  }
+  function isBookEligible(book: SeriesCatalogBook, index: number): boolean {
+    return bookEligibilityReason(book, index) === null
+  }
+  function isBookSelected(book: SeriesCatalogBook, index: number): boolean {
+    return isBookEligible(book, index) && selection.isSelected(book.id)
+  }
+  function toggleBook(book: SeriesCatalogBook, index: number) {
+    if (!busy.value && isBookEligible(book, index)) selection.toggle(book)
+  }
+  function selectAllBooks() {
+    if (!busy.value) selection.reset()
+  }
+  function clearSelectedBooks() {
+    if (!busy.value) selection.clear()
   }
   function availabilityLabel(index: number): string {
     const item = annotations.value[index]
@@ -213,11 +264,20 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     return t('bookRequests.series.missing')
   }
   watch(mediaKind, () => {
+    if (running.value) return
     if (selected.value) void loadPage(pageOffset.value)
   })
 
+  async function requestSelected() {
+    if (!selection.hasSelectedBooks.value) return
+    await submitSeries(selection.snapshot())
+  }
   async function requestAll() {
+    await submitSeries({ mode: 'all', excluded: new Set<string>(), selected: [] })
+  }
+  async function submitSeries(choice: { mode: 'all' | 'explicit'; excluded: Set<string>; selected: SeriesCatalogBook[] }) {
     if (!selected.value || busy.value || !optionsReady.value || destinationMissing.value) return
+    if (choice.mode === 'explicit' && choice.selected.length === 0) return
     busy.value = true
     running.value = true
     cancelled = false
@@ -232,61 +292,96 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     const series = selected.value
     const kind = mediaKind.value
     const destination = { targetLibraryId: targetLibraryId.value, targetFolderId: targetFolderId.value, language: language.value }
-    try {
-      do {
-        const page: SeriesCatalogPage<SeriesCatalogBook> = await readPage(
-          `/api/v1/book-requests/series-catalog/${series.id}?offset=${offset}`,
-          offset,
-        )
-        if (disposed) return
-        if (cancelled) throw new Error(t('bookRequests.series.stopped'))
-        const eligible = page.items.filter((book) => {
-          if (!book.releaseDate) {
-            unknown++
-            return false
-          }
-          if (book.releaseDate > today) {
-            skipped++
-            return false
-          }
-          return true
-        })
-        if (eligible.length) {
-          const availability = await availabilityFor(eligible, kind)
-          for (let i = 0; i < eligible.length; i++) {
-            if (disposed) return
-            if (cancelled) throw new Error(t('bookRequests.series.stopped'))
-            const book = eligible[i]!
-            const status = availability[i]!
-            if (status.ownedBookId || status.alreadySubscribed) {
-              skipped++
-              continue
-            }
-            const result = await read<BookRequestSubmitResult>('/api/v1/book-requests', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: book.title,
-                authors: book.authors,
-                seriesName: series.name,
-                ...(book.position !== null && Number.isSafeInteger(book.position) && book.position >= 0 ? { seriesIndex: book.position } : {}),
-                mediaKind: kind,
-                ...destination,
-                providerKey: 'hardcover',
-                providerId: book.id,
-              }),
-            })
-            if (disposed) return
-            if (result.subscribed) joined++
-            else created++
-            progress.value = t('bookRequests.series.progress', { created, joined, skipped, unknown })
-          }
+    const updateProgress = () => {
+      progress.value = t('bookRequests.series.progress', { created, joined, skipped, unknown })
+    }
+    const assertActive = () => {
+      if (cancelled) throw new Error(t('bookRequests.series.stopped'))
+    }
+    async function submitBatch(items: SeriesCatalogBook[]) {
+      const seen = new Set<string>()
+      const eligible = items.filter((book) => {
+        if (choice.mode === 'all' && choice.excluded.has(book.id)) return false
+        if (seen.has(book.id)) {
+          skipped++
+          return false
         }
-        if (cancelled) throw new Error(t('bookRequests.series.stopped'))
-        offset = page.nextOffset
-        progress.value = t('bookRequests.series.progress', { created, joined, skipped, unknown })
-      } while (offset !== null)
-      progress.value += ' ' + t(unknown ? 'bookRequests.series.unknownDates' : 'bookRequests.series.complete')
+        seen.add(book.id)
+        if (!book.releaseDate) {
+          unknown++
+          return false
+        }
+        if (book.releaseDate > today) {
+          skipped++
+          return false
+        }
+        return true
+      })
+      if (!eligible.length) return
+      const availability = await availabilityFor(eligible, kind)
+      for (let i = 0; i < eligible.length; i++) {
+        if (disposed) return
+        assertActive()
+        const book = eligible[i]!
+        const status = availability[i]!
+        if (status.ownedBookId !== null || status.alreadySubscribed) {
+          skipped++
+          continue
+        }
+        const result = await read<BookRequestSubmitResult>('/api/v1/book-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: book.title,
+            authors: book.authors,
+            seriesName: series.name,
+            ...(book.position !== null && Number.isSafeInteger(book.position) && book.position >= 0 ? { seriesIndex: book.position } : {}),
+            mediaKind: kind,
+            ...destination,
+            providerKey: 'hardcover',
+            providerId: book.id,
+          }),
+        })
+        if (disposed) return
+        if (result.subscribed) joined++
+        else created++
+        updateProgress()
+      }
+    }
+    try {
+      if (choice.mode === 'explicit') {
+        for (let i = 0; i < choice.selected.length; i += 25) {
+          if (disposed) return
+          assertActive()
+          await submitBatch(choice.selected.slice(i, i + 25))
+          if (disposed) return
+          assertActive()
+          updateProgress()
+        }
+      } else {
+        do {
+          const page: SeriesCatalogPage<SeriesCatalogBook> = await readPage(
+            `/api/v1/book-requests/series-catalog/${series.id}?offset=${offset}`,
+            offset,
+          )
+          if (disposed) return
+          assertActive()
+          await submitBatch(page.items)
+          if (disposed) return
+          assertActive()
+          offset = page.nextOffset
+          updateProgress()
+        } while (offset !== null)
+      }
+      progress.value +=
+        ' ' +
+        t(
+          unknown
+            ? 'bookRequests.series.unknownDates'
+            : choice.mode === 'explicit'
+              ? 'bookRequests.series.selectedComplete'
+              : 'bookRequests.series.complete',
+        )
     } catch (e) {
       if (!disposed) error.value = t('bookRequests.series.partial', { reason: e instanceof Error ? e.message : t('bookRequests.series.failed') })
     } finally {
@@ -341,6 +436,15 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     previousPage,
     nextPage,
     requestAll,
+    requestSelected,
+    bookEligibilityReason,
+    isBookEligible,
+    isBookSelected,
+    toggleBook,
+    selectAllBooks,
+    clearSelectedBooks,
+    selectionSummary: selection.selectionSummary,
+    hasSelectedBooks: selection.hasSelectedBooks,
     availabilityLabel,
   }
 }

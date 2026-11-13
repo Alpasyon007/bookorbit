@@ -59,12 +59,44 @@ const {
   clearSelection,
   previousPage,
   nextPage,
+  selectAllBooks,
+  clearSelectedBooks,
+  toggleBook,
+  isBookEligible,
+  isBookSelected,
+  bookEligibilityReason,
+  selectionSummary,
+  hasSelectedBooks,
+  requestSelected,
   requestAll,
   availabilityLabel,
 } = useSeriesRequests(() => props.seed, props.onAcknowledged)
 
 const canSearch = computed(() => query.value.trim().length >= 2)
 const optionsDisabled = computed(() => busy.value || !optionsReady.value)
+const hasCatalog = computed(() => previewLoaded.value && (books.value.length > 0 || pageOffset.value > 0 || nextOffset.value !== null))
+const selectionText = computed(() => {
+  const { mode, count } = selectionSummary.value
+  return t(`bookRequests.series.selection.${mode}`, { count })
+})
+const eligibilityLabels = {
+  upcoming: 'bookRequests.series.upcoming',
+  'unknown-date': 'bookRequests.series.unknown',
+  unavailable: 'bookRequests.series.unavailable',
+  owned: 'bookRequests.series.owned',
+  subscribed: 'bookRequests.series.subscribed',
+} as const
+const bookRows = computed(() =>
+  books.value.map((book, index) => {
+    const reason = bookEligibilityReason(book, index)
+    return {
+      book,
+      eligible: isBookEligible(book, index),
+      checked: isBookSelected(book, index),
+      status: reason ? t(eligibilityLabels[reason]) : availabilityLabel(index),
+    }
+  }),
+)
 
 async function openPreview(series: SeriesCatalogSeries) {
   selectSeries(series)
@@ -158,16 +190,49 @@ async function backToResults() {
         </div>
       </div>
 
+      <div v-if="hasCatalog" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border bg-muted px-3 py-2.5 sm:px-4">
+        <p id="series-selection-summary" role="status" class="text-sm font-medium text-foreground">{{ selectionText }}</p>
+        <div class="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" :disabled="busy || selectionSummary.mode === 'all'" @click="selectAllBooks">
+            {{ t('bookRequests.series.selectAll') }}
+          </Button>
+          <Button type="button" variant="ghost" size="sm" :disabled="busy || !hasSelectedBooks" @click="clearSelectedBooks">
+            {{ t('bookRequests.series.clearSelection') }}
+          </Button>
+        </div>
+      </div>
+
       <ul v-if="books.length" class="divide-y divide-border border-t border-border">
-        <li v-for="(book, index) in books" :key="book.id" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2.5 sm:px-4">
-          <div class="min-w-0">
-            <p class="text-sm font-medium wrap-break-word text-foreground">
-              <span v-if="book.position !== null" class="me-1.5 font-normal text-muted-foreground tabular-nums">{{ book.position }}.</span>
-              {{ book.title }}
-            </p>
-            <p class="mt-0.5 text-xs text-muted-foreground tabular-nums">{{ book.releaseDate ?? t('bookRequests.series.unknown') }}</p>
-          </div>
-          <Badge v-if="availabilityLabel(index)" variant="secondary" class="max-w-full whitespace-normal">{{ availabilityLabel(index) }}</Badge>
+        <li v-for="({ book, eligible, checked, status }, index) in bookRows" :key="book.id">
+          <label
+            class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-4"
+            :class="eligible && !busy ? 'cursor-pointer hover:bg-muted/50' : undefined"
+          >
+            <input
+              type="checkbox"
+              class="mt-1 size-4 shrink-0 rounded-xs border-border accent-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none disabled:opacity-60 sm:mt-0"
+              :checked="checked"
+              :disabled="busy || !eligible"
+              :aria-labelledby="`series-book-title-${index}`"
+              :aria-describedby="status ? `series-book-status-${index}` : undefined"
+              @change="toggleBook(book, index)"
+            />
+            <span class="min-w-0">
+              <span :id="`series-book-title-${index}`" class="block text-sm font-medium wrap-break-word text-foreground">
+                <span v-if="book.position !== null" class="me-1.5 font-normal text-muted-foreground tabular-nums">{{ book.position }}.</span>
+                {{ book.title }}
+              </span>
+              <span v-if="book.releaseDate" class="mt-0.5 block text-xs text-muted-foreground tabular-nums">{{ book.releaseDate }}</span>
+            </span>
+            <Badge
+              v-if="status"
+              :id="`series-book-status-${index}`"
+              variant="secondary"
+              class="col-start-2 max-w-full whitespace-normal sm:col-start-3"
+            >
+              {{ status }}
+            </Badge>
+          </label>
         </li>
       </ul>
       <p v-else-if="previewLoaded && !busy" role="status" class="border-t border-border px-3 py-3 text-sm text-muted-foreground sm:px-4">
@@ -185,7 +250,7 @@ async function backToResults() {
         </Button>
       </div>
 
-      <div v-if="previewLoaded && books.length" class="space-y-3 border-t border-border bg-muted p-3 sm:p-4">
+      <div v-if="hasCatalog" class="space-y-3 border-t border-border bg-muted p-3 sm:p-4">
         <fieldset class="grid min-w-0 gap-3 sm:grid-cols-2" :disabled="optionsDisabled">
           <legend class="mb-2 text-sm font-medium text-foreground">{{ t('bookRequests.series.options') }}</legend>
           <div class="grid min-w-0 gap-1.5">
@@ -245,19 +310,37 @@ async function backToResults() {
           {{ t('bookRequests.series.chooseDestination') }}
         </p>
         <p class="text-xs text-muted-foreground">{{ t('bookRequests.series.batchHint') }}</p>
-        <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          <Button type="button" class="h-auto min-h-9 whitespace-normal" :disabled="optionsDisabled || destinationMissing" @click="requestAll">
-            <Loader2 v-if="running" class="motion-safe:animate-spin" aria-hidden="true" />
+        <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <Button
+            type="button"
+            class="h-auto min-h-9 whitespace-normal"
+            aria-describedby="series-selection-summary"
+            :disabled="optionsDisabled || destinationMissing || !hasSelectedBooks"
+            @click="requestSelected"
+          >
+            {{ t('bookRequests.series.requestSelected') }}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            class="h-auto min-h-9 whitespace-normal"
+            :aria-describedby="selectionSummary.mode !== 'all' ? 'series-request-all-hint' : undefined"
+            :disabled="optionsDisabled || destinationMissing"
+            @click="requestAll"
+          >
             {{ t('bookRequests.series.requestAll') }}
           </Button>
           <Button v-if="running" type="button" variant="outline" class="h-auto min-h-9 whitespace-normal" @click="stop">
             {{ t('bookRequests.series.stop') }}
           </Button>
         </div>
+        <p v-if="selectionSummary.mode !== 'all'" id="series-request-all-hint" class="text-xs text-muted-foreground">
+          {{ t('bookRequests.series.requestAllHint') }}
+        </p>
       </div>
     </div>
 
-    <p v-if="busy && !searching" role="status" :class="running ? 'sr-only' : 'flex items-center gap-2 text-sm text-muted-foreground'">
+    <p v-if="busy && !searching" role="status" class="flex items-center gap-2 text-sm text-muted-foreground">
       <Loader2 class="size-4 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
       {{ t(running ? 'bookRequests.series.working' : 'bookRequests.series.loading') }}
     </p>

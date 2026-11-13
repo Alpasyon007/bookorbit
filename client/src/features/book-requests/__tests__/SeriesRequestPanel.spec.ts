@@ -67,6 +67,107 @@ beforeEach(() => {
   })
 })
 describe('series requests', () => {
+  it('selects requestable books by default and explains why other books cannot be selected', async () => {
+    const previous = state.api.getMockImplementation()!
+    state.api.mockImplementation(async (path, init) => {
+      if (path.includes('/series-catalog/1')) {
+        const items = [rows[0], rows[1], { ...rows[2], releaseDate: '2999-01-01' }, { ...rows[3], releaseDate: null }, rows[4]]
+        return json({ items, nextOffset: null })
+      }
+      if (path.endsWith('/availability')) {
+        return json([
+          { ...available, ownedBookId: 1 },
+          { ...available, alreadySubscribed: true },
+          available,
+          available,
+          { ...available, existingRequestId: 8 },
+        ])
+      }
+      return previous(path, init)
+    })
+    const wrapper = await setup()
+    const inputs = wrapper.findAll<HTMLInputElement>('input[type="checkbox"]')
+
+    expect(inputs.map(({ element }) => [element.checked, element.disabled])).toEqual([
+      [false, true],
+      [false, true],
+      [false, true],
+      [false, true],
+      [true, false],
+    ])
+    expect(inputs.map((input) => wrapper.get(`#${input.attributes('aria-describedby')}`).text())).toEqual([
+      'Owned',
+      'Already requested by you',
+      'Upcoming release',
+      'Release date unknown',
+      'Already requested, will join',
+    ])
+    expect(wrapper.get('#series-selection-summary').text()).toBe('All requestable books selected across all pages')
+  })
+
+  it('retains exclusions across pages and restores the entire series with Select all', async () => {
+    const wrapper = await setup()
+    const checkbox = () => wrapper.get<HTMLInputElement>('input[type="checkbox"]')
+    const summary = () => wrapper.get('#series-selection-summary').text()
+
+    await checkbox().setValue(false)
+    expect(summary()).toContain('across all pages except 1 book')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Next page')!
+      .trigger('click')
+    await flushPromises()
+    expect(checkbox().element.checked).toBe(true)
+    await checkbox().setValue(false)
+    expect(summary()).toContain('across all pages except 2 books')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Previous page')!
+      .trigger('click')
+    await flushPromises()
+    expect(checkbox().element.checked).toBe(false)
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Select all books in series')!
+      .trigger('click')
+    expect(checkbox().element.checked).toBe(true)
+    expect(summary()).toBe('All requestable books selected across all pages')
+  })
+
+  it('clears the series selection and requests only books picked on different pages', async () => {
+    const wrapper = await setup()
+    const checkbox = () => wrapper.get<HTMLInputElement>('input[type="checkbox"]')
+    const requestSelected = wrapper.findAll('button').find((button) => button.text() === 'Request selected books')!
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Clear selection')!
+      .trigger('click')
+    expect(checkbox().element.checked).toBe(false)
+    expect(requestSelected.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('#series-selection-summary').text()).toBe('No books selected')
+    await checkbox().setValue(true)
+    expect(wrapper.get('#series-selection-summary').text()).toBe('1 book selected')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Next page')!
+      .trigger('click')
+    await flushPromises()
+    expect(checkbox().element.checked).toBe(false)
+    await checkbox().setValue(true)
+    expect(wrapper.get('#series-selection-summary').text()).toBe('2 books selected')
+    expect(wrapper.get('#series-request-all-hint').text()).toContain('ignores the current selection')
+
+    await requestSelected.trigger('click')
+    await flushPromises()
+
+    const submitted = state.api.mock.calls
+      .filter(([path]) => path === '/api/v1/book-requests')
+      .map(([, init]) => JSON.parse(init!.body as string).providerId)
+    expect(submitted).toEqual(['book-0', 'book-25'])
+  })
+
   it('shows the empty state only after a successful series search', async () => {
     const previous = state.api.getMockImplementation()!
     state.api.mockImplementation((path, init) =>
