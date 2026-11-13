@@ -52,4 +52,16 @@ describe('useEffectiveViewMode', () => {
     viewMode.value = 'list'
     expect(effectiveViewMode.value).toBe('list')
   })
+
+  it('keeps Series Grid on mobile libraries and falls back to Grid on other views', () => {
+    breakpointMd.value = false
+    const library = useEffectiveViewMode({ allowSeriesGrid: true })
+    const collection = useEffectiveViewMode()
+    library.viewMode.value = 'series-grid'
+
+    expect(library.effectiveViewMode.value).toBe('series-grid')
+    expect(collection.viewMode.value).toBe('grid')
+    expect(collection.effectiveViewMode.value).toBe('grid')
+    expect(library.viewMode.value).toBe('series-grid')
+  })
 })

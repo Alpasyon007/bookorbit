@@ -46,15 +46,14 @@ const emit = defineEmits<{
 }>()
 
 function handleViewModeUpdate(value: unknown) {
-  if (value !== 'grid' && value !== 'list' && value !== 'table') return
-  emit('update:viewMode', value)
+  const mode = mobileViewModes.value.find((mode) => mode === value)
+  if (mode) emit('update:viewMode', mode)
 }
 
 const slots = useSlots()
 
-const hasViewModeActions = computed(
-  () => props.showViewModeToggle && (props.allowedViewModes.includes('grid') || props.allowedViewModes.includes('list')),
-)
+const mobileViewModes = computed(() => props.allowedViewModes.filter((mode) => mode !== 'table'))
+const hasViewModeActions = computed(() => props.showViewModeToggle && mobileViewModes.value.length > 0)
 const hasSearchAction = computed(() => props.searchable && props.mobileSearchInMenu)
 const hasSelectionAction = computed(() => props.showSelection)
 const hasCustomMobileMenu = computed(() => Boolean(slots['mobile-menu']))
@@ -72,13 +71,10 @@ const hasActions = computed(
     </DropdownMenuTrigger>
 
     <DropdownMenuContent align="end" class="w-44">
-      <template v-if="showViewModeToggle && (allowedViewModes.includes('grid') || allowedViewModes.includes('list'))">
+      <template v-if="hasViewModeActions">
         <DropdownMenuRadioGroup :model-value="viewMode" @update:model-value="handleViewModeUpdate">
-          <DropdownMenuRadioItem v-if="allowedViewModes.includes('grid')" value="grid">{{
-            t('components.viewHeader.mobileMenu.grid')
-          }}</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem v-if="allowedViewModes.includes('list')" value="list">{{
-            t('components.viewHeader.mobileMenu.list')
+          <DropdownMenuRadioItem v-for="mode in mobileViewModes" :key="mode" :value="mode">{{
+            t(mode === 'series-grid' ? 'components.viewHeader.viewModes.series-grid' : `components.viewHeader.mobileMenu.${mode}`)
           }}</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />

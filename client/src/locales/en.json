@@ -10748,7 +10748,8 @@
       "viewModes": {
         "grid": "Grid view",
         "list": "List view",
-        "table": "Table view"
+        "table": "Table view",
+        "series-grid": "Series Grid"
       }
     },
     "browseHeader": {
@@ -15055,7 +15056,11 @@
       "showControlsAria": "Show library controls",
       "export": "Export",
       "searchPlaceholder": "Search title, author, series, narrator...",
-      "allBooksLoaded": "All {count} books loaded"
+      "allBooksLoaded": "All {count} books loaded",
+      "seriesGrid": {
+        "noSeries": "No Series",
+        "continued": "{series} (continued)"
+      }
     },
     "notFound": {
       "title": "Page not found",

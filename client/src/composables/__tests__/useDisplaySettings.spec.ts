@@ -110,6 +110,13 @@ describe('useDisplaySettings preferences helpers', () => {
     expect(sanitizeDisplayPreferences('bad')).toEqual({})
   })
 
+  it('round-trips Series Grid through display preferences', () => {
+    applyDisplayPreferences({ viewMode: 'series-grid' })
+
+    expect(settings.viewMode.value).toBe('series-grid')
+    expect(getDisplayPreferencesSnapshot().viewMode).toBe('series-grid')
+  })
+
   it('sanitizes only boolean showJumpRails values', () => {
     expect(sanitizeDisplayPreferences({ showJumpRails: true })).toEqual({ showJumpRails: true })
     expect(sanitizeDisplayPreferences({ showJumpRails: false })).toEqual({ showJumpRails: false })

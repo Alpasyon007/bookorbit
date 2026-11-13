@@ -79,7 +79,7 @@ const canDeleteAuthors = computed(() => isSuperuser.value)
 
 /** The page offers exactly the two views the design has; `table` is not one of them. */
 const authorViewMode = computed<BookViewMode>({
-  get: () => (viewMode.value === 'table' ? 'grid' : viewMode.value),
+  get: () => (viewMode.value === 'list' ? 'list' : 'grid'),
   set: (next) => {
     viewMode.value = next === 'table' ? 'grid' : next
   },

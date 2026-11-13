@@ -39,6 +39,12 @@ describe('BookQueryPipe', () => {
     expect(result.pagination.size).toBe(100);
   });
 
+  it('accepts a boolean series grouping flag', () => {
+    expect(pipe.transform({ groupBySeries: true }).groupBySeries).toBe(true);
+    expect(pipe.transform({}).groupBySeries).toBeUndefined();
+    expect(() => pipe.transform({ groupBySeries: 'true' })).toThrow(BadRequestException);
+  });
+
   it('accepts a valid filter group rule', () => {
     const result = pipe.transform({
       filter: {

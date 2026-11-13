@@ -38,7 +38,7 @@ import SendBookDialog from '@/features/email/components/SendBookDialog.vue'
 import SaveAsSmartScopeDialog from '@/features/smart-scope/components/SaveAsSmartScopeDialog.vue'
 import DeleteBookDialog from '@/features/book/components/DeleteBookDialog.vue'
 import JumpRail from '@/features/book/components/JumpRail.vue'
-import type { BookCard } from '@bookorbit/types'
+import { BOOK_VIEW_MODES, type BookCard } from '@bookorbit/types'
 import { useBookViewWindow } from '@/features/book/composables/useBookViewWindow'
 import { useViewSearch } from '@/features/book/composables/useViewSearch'
 import { useSeriesCollapsePreference } from '@/features/book/composables/useSeriesCollapsePreference'
@@ -81,7 +81,9 @@ const LinkBooksSheet = defineAsyncComponent(() => import('@/features/book/compon
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { viewMode, effectiveViewMode } = useEffectiveViewMode()
+const { viewMode, effectiveViewMode } = useEffectiveViewMode({ allowSeriesGrid: true })
+const seriesGrid = computed(() => effectiveViewMode.value === 'series-grid')
+const libraryViewModes = [...BOOK_VIEW_MODES]
 const { libraries, loaded: librariesLoaded } = useLibraries()
 const { hasPermission, isDemoRestrictedAccount } = usePermissions()
 
@@ -117,10 +119,14 @@ watch(prefs, () => {
 
 const { searchQuery, debouncedQuery, clearSearch } = useViewSearch()
 const mainRef = ref<HTMLElement | null>(null)
+watch(seriesGrid, () => {
+  if (mainRef.value) mainRef.value.scrollTop = 0
+})
 
 const {
   booksProxy: books,
   slots,
+  seriesGridBlocks,
   total,
   bookTotal,
   loading,
@@ -323,14 +329,25 @@ const { newBookIds, start: startLiveScan, stop: stopLiveScan } = useLiveScanBook
 watch(
   libraryId,
   (id) => {
-    if (id !== null) {
-      subscribeLibrary(id)
-      startLiveScan()
-    } else {
-      stopLiveScan()
-    }
+    if (id !== null) subscribeLibrary(id)
   },
   { immediate: true },
+)
+
+watch(
+  [libraryId, seriesGrid],
+  ([id, grouped]) => {
+    if (id !== null && !grouped) startLiveScan()
+    else stopLiveScan()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => (libraryId.value === null ? undefined : getProgress(libraryId.value)),
+  (progress) => {
+    if (seriesGrid.value && progress?.status === 'completed') resetBooks()
+  },
 )
 
 const filterOpen = ref(false)
@@ -883,6 +900,7 @@ defineOptions({ name: 'HomeView' })
           <span :class="barDivider" aria-hidden="true" />
           <BrowseViewControls
             v-model:view-mode="viewMode"
+            :allowed-view-modes="libraryViewModes"
             :selection-mode="selectionMode"
             :display-wide="effectiveViewMode === 'table'"
             @toggle-selection="toggleSelectionMode"
@@ -894,7 +912,7 @@ defineOptions({ name: 'HomeView' })
                 :grid-gap="gridGap"
                 show-jump-rail-toggle
                 :show-jump-rails="showJumpRails"
-                show-collapse-series
+                :show-collapse-series="!seriesGrid"
                 :collapse-series="effectiveCollapseEnabled"
                 :collapse-series-locked="selectionMode"
                 @update:cover-size="handleCoverSizeUpdate"
@@ -971,7 +989,7 @@ defineOptions({ name: 'HomeView' })
 
           <!-- Grid view -->
           <VirtualBookGrid
-            v-if="effectiveViewMode === 'grid' && books.length > 0"
+            v-if="(effectiveViewMode === 'grid' || seriesGrid) && books.length > 0"
             ref="bookGridRef"
             :books="slots"
             :cover-size="coverSize"
@@ -979,7 +997,8 @@ defineOptions({ name: 'HomeView' })
             :selection-mode="selectionMode"
             :is-selected="isSelected"
             :new-book-ids="newBookIds"
-            :rail-gutter="railGutterReserved"
+            :series-grid-blocks="seriesGrid ? seriesGridBlocks : undefined"
+            :rail-gutter="!seriesGrid && railGutterReserved"
             :rail-gutter-kind="bucketKind"
             @range="handleRange"
             @first-visible-index="handleFirstVisibleIndex"

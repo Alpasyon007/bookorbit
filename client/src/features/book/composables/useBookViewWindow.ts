@@ -80,7 +80,7 @@ export function useBookViewWindow(options: {
     sort: sort.value,
     ...(randomSortActive.value ? { randomSeed: randomSeed.value } : {}),
     ...(filter.value ? { filter: filter.value } : {}),
-    ...(options.collapseEnabled?.value ? { collapseSeries: true } : {}),
+    ...(options.viewMode.value === 'series-grid' ? { groupBySeries: true } : options.collapseEnabled?.value ? { collapseSeries: true } : {}),
     ...(options.collapseLinked ? { collapseLinked: true } : {}),
     ...(options.q?.value.trim() ? { q: options.q.value.trim() } : {}),
   }))

@@ -398,6 +398,8 @@ export type BookQuery = {
   sort: SortSpec[];
   pagination: { page: number; size: number };
   collapseSeries?: boolean;
+  /** Keep primary-series cards contiguous, applying the requested sort inside each group. */
+  groupBySeries?: boolean;
   /**
    * Fold linked books into one card per group (the lead, else a stable representative). Released
    * clients never send it, so their lists keep every book.

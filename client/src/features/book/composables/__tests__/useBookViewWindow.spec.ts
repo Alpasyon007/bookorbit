@@ -172,6 +172,30 @@ describe('useBookViewWindow', () => {
     expect(listRequestBodies()[0]).toMatchObject({ sort: [{ field: 'title', dir: 'asc' }] })
   })
 
+  it('sends grouping only in Series Grid and keeps search, sorting, and paging in the same query', async () => {
+    mockApi(250)
+    const { win, viewMode } = setup({ viewMode: 'series-grid', collapse: true, collapseLinked: true, q: 'Dune' })
+    await flush()
+    win.handleRange(110, 119)
+    await flush()
+
+    expect(listRequests()).toEqual([0, 1])
+    expect(listRequestBodies()[1]).toMatchObject({
+      groupBySeries: true,
+      collapseLinked: true,
+      q: 'Dune',
+      sort: [{ field: 'title', dir: 'asc' }],
+      pagination: { page: 1, size: 100 },
+    })
+    expect(listRequestBodies()[1]).not.toHaveProperty('collapseSeries')
+    expect(jumpRequestCount()).toBe(0)
+
+    viewMode.value = 'grid'
+    await flush()
+    expect(listRequestBodies().at(-1)).toHaveProperty('collapseSeries', true)
+    expect(listRequestBodies().at(-1)).not.toHaveProperty('groupBySeries')
+  })
+
   it('sends the supplied default sort and hides the rail for collection order', async () => {
     mockApi(250)
     const { win } = setup({ viewMode: 'grid', defaultSort: COLLECTION_DEFAULT_SORT })

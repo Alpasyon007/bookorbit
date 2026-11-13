@@ -24,6 +24,8 @@ type BookRow = {
   seriesId?: number | null;
   seriesName: string | null;
   seriesIndex: string | null;
+  seriesGroupKey?: string | null;
+  seriesGroupLabel?: string | null;
   publishedDate: string | null;
   publishedYear: number | null;
   language: string | null;
@@ -217,6 +219,7 @@ export function assembleBookCards(
       seriesId: row.seriesId ?? null,
       seriesName: row.seriesName ?? null,
       seriesIndex: row.seriesIndex ?? null,
+      ...(row.seriesGroupKey ? { seriesGroup: { key: row.seriesGroupKey, label: row.seriesGroupLabel ?? null } } : {}),
       seriesMemberships: (seriesMembershipsByBook.get(row.id) ?? [])
         .slice()
         .sort((a, b) => a.displayOrder - b.displayOrder || a.seriesId - b.seriesId)

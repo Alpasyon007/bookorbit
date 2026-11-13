@@ -1,16 +1,19 @@
 import { randomUUID } from 'crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { readdir, rm, stat } from 'fs/promises';
 import { join } from 'path';
 
 import * as unzipper from 'unzipper';
-import { Permission } from '@bookorbit/types';
+import { Permission, type BooksPage } from '@bookorbit/types';
 
 import { appSettings } from '../src/db/schema/auth';
 import { bookCovers } from '../src/db/schema/book-covers';
 import { bookFiles, books } from '../src/db/schema/books';
 import { bookMetadata } from '../src/db/schema/metadata';
+import { bookLinks, bookLinkGroups } from '../src/db/schema/book-links';
+import { bookSeries, bookSeriesMemberships } from '../src/db/schema/series';
+import { libraries } from '../src/db/schema/libraries';
 import { CoverSlotBackfillService } from '../src/modules/cover/cover-slot-backfill.service';
 
 import {
@@ -54,6 +57,136 @@ async function listZipEntries(response: InjectResponse): Promise<string[]> {
   const zip = await unzipper.Open.buffer(zipBuffer(response));
   return zip.files.map((file) => file.path).sort();
 }
+
+describe('Series Grid book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
+  it('keeps primary series groups stable across pages, filters, and linked copies', async () => {
+    const ctx = await createMetadataWriteE2EContext();
+    const visible = await createLibraryWithFolder(ctx);
+    const hidden = await createLibraryWithFolder(ctx);
+    const reader = await createUserAndLogin(ctx);
+    const headers = authHeader(reader.accessToken);
+    await grantLibraryAccess(ctx, reader.userId, visible.libraryId, 'viewer');
+    const seriesKey = randomUUID();
+    const [seriesA, seriesB] = await ctx.db
+      .insert(bookSeries)
+      .values([
+        { name: 'Shared Label', normalizedName: `shared-label-a-${seriesKey}` },
+        { name: 'Shared Label', normalizedName: `shared-label-b-${seriesKey}` },
+      ])
+      .returning({ id: bookSeries.id });
+
+    async function seedBook(library: typeof visible, title: string, seriesId: number | null, seriesName: string | null) {
+      const [book] = await ctx.db
+        .insert(books)
+        .values({ libraryId: library.libraryId, libraryFolderId: library.libraryFolderId, folderPath: join(library.folderPath, title) })
+        .returning({ id: books.id });
+      await ctx.db.insert(bookMetadata).values({ bookId: book!.id, title, seriesId, seriesName });
+      return book!.id;
+    }
+
+    async function list(payload: Record<string, unknown>): Promise<BooksPage> {
+      const response = await ctx.app.inject({ method: 'POST', url: `/api/v1/libraries/${visible.libraryId}/books`, headers, payload });
+      expect(response.statusCode, response.body).toBe(201);
+      return response.json();
+    }
+
+    try {
+      const alpha = await seedBook(visible, 'Alpha Contract', seriesA!.id, 'shared label');
+      const beta = await seedBook(visible, 'Beta Contract', seriesB!.id, 'Shared Label');
+      const gamma = await seedBook(visible, 'Gamma Contract', seriesA!.id, 'shared label');
+      await seedBook(hidden, 'Hidden Contract', seriesA!.id, 'Shared Label');
+      await ctx.db.insert(bookSeriesMemberships).values([
+        { bookId: alpha, seriesId: seriesA!.id, displayOrder: 0 },
+        { bookId: alpha, seriesId: seriesB!.id, displayOrder: 1 },
+      ]);
+
+      const query = { groupBySeries: true, sort: [{ field: 'title', dir: 'desc' }] };
+      const groupA = { key: `series:${seriesA!.id}`, label: 'Shared Label' };
+      const groupB = { key: `series:${seriesB!.id}`, label: 'Shared Label' };
+      const pages = await Promise.all([0, 1, 2].map((page) => list({ ...query, collapseSeries: true, pagination: { page, size: 1 } })));
+      expect(pages.map((page) => page.total)).toEqual([3, 3, 3]);
+      const cards = pages.flatMap((page) => page.items);
+      expect(cards.map(({ id, seriesGroup }) => [id, seriesGroup])).toEqual([
+        [gamma, groupA],
+        [alpha, groupA],
+        [beta, groupB],
+      ]);
+      expect(cards[1]!.seriesMemberships?.map(({ seriesId }) => seriesId)).toEqual([seriesA!.id, seriesB!.id]);
+
+      const filtered = await list({
+        ...query,
+        q: 'Contract',
+        filter: { type: 'group', join: 'AND', rules: [{ type: 'rule', field: 'title', operator: 'contains', value: 'Beta' }] },
+      });
+      expect(filtered.total).toBe(1);
+      expect(filtered.items[0]).toMatchObject({ id: beta, seriesGroup: groupB });
+
+      const [link] = await ctx.db.insert(bookLinkGroups).values({ leadBookId: beta }).returning({ id: bookLinkGroups.id });
+      try {
+        await ctx.db.insert(bookLinks).values([alpha, beta].map((bookId) => ({ bookId, groupId: link!.id })));
+        const linked = await list({ ...query, collapseLinked: true });
+        expect(linked.total).toBe(2);
+        expect(linked.bookTotal).toBe(3);
+        expect(linked.items.map(({ id, seriesGroup }) => [id, seriesGroup])).toEqual([
+          [gamma, groupA],
+          [beta, groupB],
+        ]);
+      } finally {
+        await ctx.db.delete(bookLinkGroups).where(eq(bookLinkGroups.id, link!.id));
+      }
+
+      const legacy = await seedBook(visible, 'Legacy Contract', null, '  LEGACY  Saga ');
+      const ungrouped = await seedBook(visible, 'Standalone Contract', null, ' ');
+      const fallback = await list(query);
+      expect(fallback.items.map(({ id, seriesGroup }) => [id, seriesGroup])).toEqual([
+        [legacy, { key: 'legacy:legacy saga', label: 'legacy saga' }],
+        [gamma, groupA],
+        [alpha, groupA],
+        [beta, groupB],
+        [ungrouped, { key: 'none', label: null }],
+      ]);
+
+      const inaccessible = await ctx.app.inject({ method: 'POST', url: `/api/v1/libraries/${hidden.libraryId}/books`, headers, payload: query });
+      expect(inaccessible.statusCode).toBe(403);
+      const ordinary = await list({});
+      expect(ordinary.items.every((card) => card.seriesGroup === undefined)).toBe(true);
+
+      const displayPath = '/api/v1/user-preferences/display';
+      const saveMode = await ctx.app.inject({
+        method: 'PUT',
+        url: displayPath,
+        headers,
+        payload: {
+          settings: {
+            portraitCoverSize: 180,
+            squareCoverSize: 160,
+            coverSizeScope: 'per-view',
+            gridGap: 28,
+            portraitGridGap: 24,
+            squareGridGap: 20,
+            viewMode: 'series-grid',
+            cardOverlays: ['format'],
+            smartScopeFilterExpanded: true,
+            authorCoverSize: 140,
+            authorCoverShape: 'circle',
+            tableZebraStriping: false,
+            tableDensity: 'comfortable',
+            bookSpineOverlay: 'off',
+            bookShadowStrength: 'default',
+            bookCoverDisplayMode: 'blurred-fit',
+          },
+        },
+      });
+      expect(saveMode.statusCode, saveMode.body).toBe(204);
+      const savedMode = await ctx.app.inject({ method: 'GET', url: displayPath, headers });
+      expect(savedMode.json()).toMatchObject({ settings: { viewMode: 'series-grid' } });
+    } finally {
+      await ctx.db.delete(libraries).where(inArray(libraries.id, [visible.libraryId, hidden.libraryId]));
+      await ctx.db.delete(bookSeries).where(inArray(bookSeries.id, [seriesA!.id, seriesB!.id]));
+      await closeMetadataWriteE2EContext(ctx);
+    }
+  });
+});
 
 describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
   let ctx!: MetadataWriteE2EContext;

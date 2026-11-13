@@ -29,6 +29,7 @@ import { SeriesMembershipService } from '../../common/services/series-membership
 import { BookQueryBuilder } from './book-query-builder.service';
 import { letterJumpBucketExpr } from './jump-bucket-expr';
 import { LINK_FOLDED_BY_PREFERENCE_SQL, LINK_FOLDED_BY_SORT_SQL, LINK_FOLDED_COUNT_SQL, linkMembersCte } from './link-collapse-sql';
+import { seriesGridGroupKey, seriesGridGroupLabel, seriesGridGroupOrder, seriesGridSeriesJoin } from './series-grid-sql';
 import { preserveOutgoingChapters } from '../../db/preserve-audiobook-revision';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
@@ -573,11 +574,11 @@ export class BookRepository {
     return this.db.transaction((tx) => callback(tx));
   }
 
-  async findCards(opts: { where: SQL | undefined; orderBy: SQL[]; limit: number; offset: number; userId: number }) {
-    const { where, orderBy, limit, offset, userId } = opts;
+  async findCards(opts: { where: SQL | undefined; orderBy: SQL[]; limit: number; offset: number; userId: number; groupBySeries?: boolean }) {
+    const { where, orderBy, limit, offset, userId, groupBySeries } = opts;
     const visibleWhere = this.visibleWhere(where);
 
-    const rows = await this.db
+    const query = this.db
       .select({
         id: books.id,
         libraryId: books.libraryId,
@@ -591,6 +592,7 @@ export class BookRepository {
         seriesId: bookMetadata.seriesId,
         seriesName: bookMetadata.seriesName,
         seriesIndex: bookMetadata.seriesIndex,
+        ...(groupBySeries ? { seriesGroupKey: seriesGridGroupKey, seriesGroupLabel: seriesGridGroupLabel } : {}),
         publishedDate: bookMetadata.publishedDate,
         publishedYear: bookMetadata.publishedYear,
         language: bookMetadata.language,
@@ -611,9 +613,10 @@ export class BookRepository {
       .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
       .leftJoin(userBookRatings, and(eq(userBookRatings.bookId, books.id), eq(userBookRatings.userId, userId)))
       .where(visibleWhere)
-      .orderBy(...orderBy)
+      .orderBy(...(groupBySeries ? [...seriesGridGroupOrder, ...orderBy] : orderBy))
       .limit(limit)
       .offset(offset);
+    const rows = groupBySeries ? await query.$dynamic().leftJoin(bookSeries, seriesGridSeriesJoin) : await query;
 
     const total = rows.length > 0 ? rows[0]._total : await this.countWhere(visibleWhere);
 
@@ -654,10 +657,12 @@ export class BookRepository {
     limit: number;
     offset: number;
     userId: number;
+    groupBySeries?: boolean;
   }): Promise<Awaited<ReturnType<BookRepository['findCards']>> & { bookTotal: number }> {
-    const { where, orderBy, limit, offset, userId } = opts;
+    const { where, orderBy, limit, offset, userId, groupBySeries } = opts;
     const visibleWhere = this.visibleWhere(where);
-    const link = this.flatLinkParts(visibleWhere, orderBy);
+    const link = groupBySeries ? this.seriesCollapseLinkParts(visibleWhere, true) : this.flatLinkParts(visibleWhere, orderBy);
+    const pageOrder = groupBySeries ? [...seriesGridGroupOrder, ...orderBy] : orderBy;
     const page = await this.db.execute<{ card_id: number; total_count: string; folded_count: string }>(sql`
       WITH ${link.prefixCte}
       folded AS (SELECT ${LINK_FOLDED_COUNT_SQL} AS folded_count)
@@ -667,11 +672,12 @@ export class BookRepository {
         folded.folded_count
       FROM books
       LEFT JOIN book_metadata ON book_metadata.book_id = books.id
+      ${groupBySeries ? sql`LEFT JOIN ${bookSeries} ON ${seriesGridSeriesJoin}` : sql``}
       LEFT JOIN link_members member ON member.id = books.id AND member.matched_members > 1
       LEFT JOIN link_members rep ON rep.group_id = member.group_id AND rep.pref_rn = 1
       CROSS JOIN folded
       WHERE ${link.where}
-      ORDER BY ${sql.join(orderBy, sql`, `)}
+      ORDER BY ${sql.join(pageOrder, sql`, `)}
       LIMIT ${limit} OFFSET ${offset}
     `);
 
@@ -694,7 +700,14 @@ export class BookRepository {
 
     const total = Number(first.total_count);
     const cardIds = page.rows.map((row) => Number(row.card_id));
-    const cards = await this.findCards({ where: inArray(books.id, cardIds), orderBy: [], limit: cardIds.length, offset: 0, userId });
+    const cards = await this.findCards({
+      where: inArray(books.id, cardIds),
+      orderBy: [],
+      limit: cardIds.length,
+      offset: 0,
+      userId,
+      ...(groupBySeries ? { groupBySeries } : {}),
+    });
     const position = new Map(cardIds.map((id, index) => [id, index]));
     const rows = cards.rows.slice().sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
     return { ...cards, rows, total, bookTotal: total + Number(first.folded_count) };

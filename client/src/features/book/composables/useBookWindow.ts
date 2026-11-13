@@ -10,6 +10,7 @@ export type BookWindowQuery = Omit<BookQuery, 'pagination'>
 
 export type BookPlaceholder = { id: number; placeholder: true }
 export type BookSlot = BookCard | BookPlaceholder
+export type SeriesGridBlock = readonly BookCard['seriesGroup'][]
 
 export function isBookPlaceholder(slot: BookSlot): slot is BookPlaceholder {
   return (slot as BookPlaceholder).placeholder === true
@@ -42,6 +43,7 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
   const loading = shallowRef(false)
   const initialized = shallowRef(false)
   const error = shallowRef<string | null>(null)
+  const seriesGridBlocks = shallowRef<readonly (SeriesGridBlock | undefined)[]>([])
 
   const inFlight = new Map<number, Promise<void>>()
   const failedAt = new Map<number, number>()
@@ -114,6 +116,13 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
       if (gen !== generation) return
 
       const next = resizeSlots(swapPending ? [] : slots.value, data.total)
+      if (body.groupBySeries) {
+        const nextBlocks = swapPending ? [] : seriesGridBlocks.value.slice(0, Math.ceil(data.total / BOOK_WINDOW_BLOCK_SIZE))
+        nextBlocks[block] = data.items.map((card) => card.seriesGroup)
+        seriesGridBlocks.value = nextBlocks
+      } else if (seriesGridBlocks.value.length > 0) {
+        seriesGridBlocks.value = []
+      }
       swapPending = false
       const start = block * BOOK_WINDOW_BLOCK_SIZE
       for (let i = 0; i < data.items.length && start + i < next.length; i++) {
@@ -129,10 +138,7 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
       // The rows still on screen belong to the query this request was replacing, so they cannot
       // stand in for one that failed.
       if (swapPending) {
-        swapPending = false
-        slots.value = []
-        total.value = 0
-        bookTotal.value = 0
+        clearContent()
       }
       failedAt.set(block, Date.now())
       error.value = e instanceof Error ? e.message : 'Failed to load books'
@@ -183,6 +189,7 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
   function clearContent() {
     swapPending = false
     slots.value = []
+    seriesGridBlocks.value = []
     total.value = 0
     bookTotal.value = 0
   }
@@ -251,14 +258,17 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
     if (cards.length === 0) return
     const byId = new Map(cards.map((card) => [card.id, card]))
     let changed = false
+    let seriesChanged = false
     const next = slots.value.map((slot) => {
       if (isBookPlaceholder(slot)) return slot
       const replacement = byId.get(slot.id)
       if (!replacement || replacement === slot) return slot
       changed = true
+      seriesChanged ||= slot.seriesId !== replacement.seriesId || slot.seriesName !== replacement.seriesName
       return replacement
     })
-    if (changed) slots.value = next
+    if (seriesChanged && options.query.value.groupBySeries) reset()
+    else if (changed) slots.value = next
   }
 
   function updateBook(updated: BookCard) {
@@ -270,6 +280,10 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
     const next = slots.value.filter((slot) => isBookPlaceholder(slot) || !idSet.has(slot.id))
     const removed = slots.value.length - next.length
     if (removed === 0) return
+    if (options.query.value.groupBySeries) {
+      reset()
+      return
+    }
     invalidateInFlight()
     slots.value = next
     total.value = Math.max(0, total.value - removed)
@@ -281,6 +295,10 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
     const existingIds = new Set(loadedCards.value.map((card) => card.id))
     const fresh = cards.filter((card) => !existingIds.has(card.id))
     if (fresh.length === 0) return
+    if (options.query.value.groupBySeries) {
+      reset()
+      return
+    }
     invalidateInFlight()
     slots.value = [...fresh, ...slots.value]
     total.value = total.value + fresh.length
@@ -332,6 +350,7 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
     loading,
     initialized,
     error,
+    seriesGridBlocks,
     ensureRange,
     reset,
     retry,

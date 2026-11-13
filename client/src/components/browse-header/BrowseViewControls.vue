@@ -2,7 +2,7 @@
 import { cn } from '@/lib/utils'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CheckSquare, LayoutGrid, List, SlidersHorizontal, Square, Table2 } from '@lucide/vue'
+import { CheckSquare, LayoutGrid, List, PanelsTopLeft, SlidersHorizontal, Square, Table2 } from '@lucide/vue'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import ViewHeaderMobileMenu from '@/components/view-header/ViewHeaderMobileMenu.vue'
@@ -41,7 +41,7 @@ const { t } = useI18n()
 const displayOpen = ref(false)
 const mobileDisplayOpen = ref(false)
 
-const VIEW_ICONS = { grid: LayoutGrid, list: List, table: Table2 } as const
+const VIEW_ICONS = { grid: LayoutGrid, list: List, table: Table2, 'series-grid': PanelsTopLeft } as const
 
 function handleViewMode(mode: BookViewMode) {
   emit('update:viewMode', mode)

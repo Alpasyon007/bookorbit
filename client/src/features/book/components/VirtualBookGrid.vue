@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useElementSize, useWindowSize, watchDebounced } from '@vueuse/core'
+import { useI18n } from 'vue-i18n'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import type { BookCard, ConcreteBookMediaKind, CoverAspectRatio, JumpBucketKind } from '@bookorbit/types'
 import BookCoverCard from './BookCoverCard.vue'
-import BookCoverSkeleton from './BookCoverSkeleton.vue'
 import CollapsedSeriesCard from './CollapsedSeriesCard.vue'
+import VirtualBookGridCell from './VirtualBookGridCell.vue'
 import { cardMediaView } from '../lib/card-media'
 import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO } from '../lib/cover-aspect-ratio'
-import { isBookPlaceholder, type BookSlot } from '../composables/useBookWindow'
+import { BOOK_WINDOW_BLOCK_SIZE, isBookPlaceholder, type BookSlot, type SeriesGridBlock } from '../composables/useBookWindow'
+import { createSeriesGridLayout, seriesGridRowIndex } from '../lib/series-grid-layout'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
 
 type BookActionType = 'quick-view' | 'add-to-collection' | 'move-to-library' | 'delete'
@@ -26,6 +28,7 @@ const props = withDefaults(
     railGutter?: boolean
     railGutterKind?: JumpBucketKind | null
     allowMoveToLibrary?: boolean
+    seriesGridBlocks?: readonly (SeriesGridBlock | undefined)[]
     /** Draws every card as this medium when the book has it, such as in a series' Audiobooks group. */
     mediaKind?: ConcreteBookMediaKind | null
   }>(),
@@ -50,9 +53,16 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
-const scrollerRef = ref<{ scrollToItem: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void } | null>(null)
+const scrollerRef = ref<{
+  scrollToItem: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void
+  getScroll?: () => { start: number }
+  findItemIndex?: (offset: number) => number
+  getItemOffset?: (index: number) => number
+  scrollToPosition?: (offset: number) => void
+} | null>(null)
 const { width: containerWidth } = useElementSize(containerRef)
 const { width: windowWidth } = useWindowSize()
+const { t } = useI18n()
 
 function asPositiveInt(value: unknown, fallback: number) {
   const n = Number(value)
@@ -132,6 +142,11 @@ const showLabel = computed(() => cardInfoMode.value === 'below-cover')
 
 const itemSize = computed(() => cardHeight.value + labelAreaHeight.value + gapPx.value)
 const buffer = computed(() => Math.max(itemSize.value * 2, 240))
+const layoutSeriesGrid = createSeriesGridLayout()
+const seriesGridRows = computed(() =>
+  layoutSeriesGrid(props.seriesGridBlocks ? props.books.length : 0, props.seriesGridBlocks ?? [], gridItems.value, itemSize.value),
+)
+const seriesGridRowStyle = computed(() => ({ gridTemplateColumns: `repeat(${gridItems.value}, ${itemSecondarySize.value}px)` }))
 
 const scrollerStyle = computed(() => ({
   '--book-grid-gap': `${gapPx.value}px`,
@@ -152,10 +167,6 @@ const useVariableStaticWidths = computed(() => !props.virtualized && squareCover
 
 const staticBooks = computed(() => props.books.filter((slot): slot is BookCard => !isBookPlaceholder(slot)))
 
-function asBook(slot: BookSlot): BookCard {
-  return slot as BookCard
-}
-
 function staticItemStyle(book: BookCard): { width: string; maxWidth: string } {
   const scale = staticCoverAspectRatio(book) === '1/1' ? squareCoverScale.value : 1
   const width = Math.max(1, Math.round(coverPx.value * scale))
@@ -168,6 +179,27 @@ function staticCoverAspectRatio(book: BookCard): CoverAspectRatio {
 
 function handleScrollerUpdate(startIndex: number, endIndex: number) {
   emit('range', startIndex, endIndex)
+}
+
+function handleSeriesGridUpdate(startIndex: number, endIndex: number) {
+  const start = seriesGridRows.value[startIndex]
+  const end = seriesGridRows.value[endIndex - 1]
+  if (!start || !end) return
+
+  const pageStart = Math.floor(start.start / BOOK_WINDOW_BLOCK_SIZE) * BOOK_WINDOW_BLOCK_SIZE
+  emit('range', Math.max(0, pageStart - 1), end.end - 1)
+}
+
+function handleBookAction(book: BookCard, action: BookActionType) {
+  emit('action', book, action)
+}
+
+function handleBookSelect(bookId: number, event: MouseEvent) {
+  emit('select', bookId, event)
+}
+
+function handleBookUpdate(updated: BookCard) {
+  emit('update:book', updated)
 }
 
 // First visible index from scroll geometry: O(1), no per-cell DOM reads, and
@@ -187,6 +219,7 @@ function findScrollParent(el: HTMLElement | null): HTMLElement | null {
 }
 
 function computeFirstVisibleIndex() {
+  if (props.seriesGridBlocks) return
   const gridEl = containerRef.value
   if (!scrollParent || !gridEl || props.books.length === 0 || itemSize.value <= 0) return
   const parentRect = scrollParent.getBoundingClientRect()
@@ -245,7 +278,7 @@ onBeforeUnmount(() => {
 // view. firstVisibleIndex still holds the pre-relayout value here because it
 // only updates from scroll events.
 watch(gridItems, (next, prev) => {
-  if (!props.virtualized || !prev || next === prev) return
+  if (!props.virtualized || props.seriesGridBlocks || !prev || next === prev) return
   const anchor = firstVisibleIndex.value
   if (anchor <= 0) return
   void nextTick(() => {
@@ -253,7 +286,32 @@ watch(gridItems, (next, prev) => {
   })
 })
 
+// Resolving a page can add divider rows above the viewport. Keep its current book and offset in view.
+watch(seriesGridRows, (rows, previousRows) => {
+  const scroller = scrollerRef.value
+  const top = scroller?.getScroll?.().start ?? 0
+  const oldIndex = scroller?.findItemIndex?.(top) ?? 0
+  const previousRow = previousRows[oldIndex]
+  if (!scroller || !top || !previousRow || rows.length === 0) return
+
+  const offset = top - (scroller.getItemOffset?.(oldIndex) ?? top)
+  const bookIndex = Math.min(previousRow.start, props.books.length - 1)
+  let nextIndex = seriesGridRowIndex(rows, bookIndex)
+  if (previousRow.heading && rows[nextIndex - 1]?.heading?.key === previousRow.heading.key && rows[nextIndex - 1]?.start === bookIndex) {
+    nextIndex--
+  }
+  void nextTick(() => {
+    if (rows !== seriesGridRows.value) return
+    const nextOffset = scroller.getItemOffset?.(nextIndex)
+    if (nextOffset !== undefined) scroller.scrollToPosition?.(nextOffset + Math.min(offset, rows[nextIndex]!.size - 1))
+  })
+})
+
 function scrollToIndex(index: number) {
+  if (props.seriesGridBlocks) {
+    scrollerRef.value?.scrollToItem(seriesGridRowIndex(seriesGridRows.value, index), { align: 'start' })
+    return
+  }
   jumpAnchorIndex = index
   jumpAnchorRowStart = null
   scrollerRef.value?.scrollToItem(index, { align: 'start' })
@@ -317,6 +375,52 @@ defineExpose({ scrollToIndex })
     </div>
 
     <RecycleScroller
+      v-else-if="seriesGridBlocks"
+      ref="scrollerRef"
+      :items="seriesGridRows"
+      key-field="id"
+      page-mode
+      emit-update
+      :buffer="buffer"
+      :style="scrollerStyle"
+      class="book-grid-scroller [overflow-anchor:none]"
+      @update="handleSeriesGridUpdate"
+    >
+      <template #default="{ item }">
+        <div v-if="item.heading" class="flex items-center pb-2" :style="{ height: `${item.size}px` }">
+          <h2 class="w-full truncate border-b border-border pb-2 text-sm font-semibold text-foreground" :title="item.heading.label ?? undefined">
+            {{
+              item.heading.continued
+                ? t('views.bookView.seriesGrid.continued', { series: item.heading.label ?? t('views.bookView.seriesGrid.noSeries') })
+                : (item.heading.label ?? t('views.bookView.seriesGrid.noSeries'))
+            }}
+          </h2>
+        </div>
+        <div v-else class="grid" :style="seriesGridRowStyle">
+          <div
+            v-for="book in books.slice(item.start, item.end)"
+            :key="book.id"
+            class="book-grid-cell"
+            :class="{ 'book-grid-cell--new': newBookIds.has(book.id) }"
+          >
+            <VirtualBookGridCell
+              :item="book"
+              :cover-aspect-ratio="coverAspectRatio"
+              :show-label="showLabel"
+              :selection-mode="selectionMode"
+              :selected="isSelected?.(book.id) ?? false"
+              :allow-move-to-library="allowMoveToLibrary"
+              :media-kind="mediaKind"
+              @action="handleBookAction"
+              @select="handleBookSelect"
+              @update:book="handleBookUpdate"
+            />
+          </div>
+        </div>
+      </template>
+    </RecycleScroller>
+
+    <RecycleScroller
       v-else
       ref="scrollerRef"
       :items="books"
@@ -333,27 +437,17 @@ defineExpose({ scrollToIndex })
     >
       <template #default="{ item }">
         <div class="book-grid-cell" :class="{ 'book-grid-cell--new': props.newBookIds.has(item.id) }">
-          <BookCoverSkeleton v-if="isBookPlaceholder(item)" />
-          <!-- Every tile takes the grid's shape; art of the other shape follows the cover display setting. -->
-          <CollapsedSeriesCard
-            v-else-if="asBook(item).collapsedSeries"
-            :book="asBook(item)"
-            :cover-aspect-ratio="coverAspectRatio"
-            :show-label="showLabel"
-            :selection-mode="selectionMode"
-          />
-          <BookCoverCard
-            v-else
-            :book="asBook(item)"
+          <VirtualBookGridCell
+            :item="item"
             :cover-aspect-ratio="coverAspectRatio"
             :show-label="showLabel"
             :selection-mode="selectionMode"
             :selected="isSelected?.(item.id) ?? false"
             :allow-move-to-library="allowMoveToLibrary"
             :media-kind="mediaKind"
-            @action="emit('action', asBook(item), $event)"
-            @select="emit('select', item.id, $event)"
-            @update:book="emit('update:book', $event)"
+            @action="handleBookAction"
+            @select="handleBookSelect"
+            @update:book="handleBookUpdate"
           />
         </div>
       </template>

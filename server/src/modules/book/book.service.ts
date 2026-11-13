@@ -1301,7 +1301,7 @@ export class BookService {
     // An absent key means "fall back to the query filter"; a present key set to undefined means the
     // caller resolved the selection filter to nothing, which is not the same thing.
     const seriesSelectionFilter = options && 'seriesSelectionFilter' in options ? options.seriesSelectionFilter : query.filter;
-    const shouldCollapse = query.collapseSeries === true && !BookQueryBuilder.hasSeriesSelectionFilter(seriesSelectionFilter);
+    const shouldCollapse = !query.groupBySeries && query.collapseSeries === true && !BookQueryBuilder.hasSeriesSelectionFilter(seriesSelectionFilter);
     const collapseLinked = await this.shouldCollapseLinks(query, where);
     const reportsBookTotal = query.collapseSeries === true || query.collapseLinked === true;
 
@@ -1355,7 +1355,7 @@ export class BookService {
       ...(query.randomSeed !== undefined ? { randomSeed: query.randomSeed } : {}),
       ...(query.q !== undefined ? { query: query.q } : {}),
     });
-    const cardQuery = { where, orderBy, limit: size, offset: page * size, userId };
+    const cardQuery = { where, orderBy, limit: size, offset: page * size, userId, ...(query.groupBySeries ? { groupBySeries: true } : {}) };
     let bookTotal: number | undefined;
     let cardPage: Awaited<ReturnType<BookRepository['findCards']>>;
     if (collapseLinked) {

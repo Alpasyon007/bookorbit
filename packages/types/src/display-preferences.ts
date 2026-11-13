@@ -14,7 +14,7 @@ export type GridCardLabelField = (typeof GRID_CARD_LABEL_FIELDS)[number];
 export const COVER_SIZE_SCOPES = ["per-view", "synced"] as const;
 export type CoverSizeScope = (typeof COVER_SIZE_SCOPES)[number];
 
-export const BOOK_VIEW_MODES = ["grid", "list", "table"] as const;
+export const BOOK_VIEW_MODES = ["grid", "list", "table", "series-grid"] as const;
 export type BookViewMode = (typeof BOOK_VIEW_MODES)[number];
 
 export const AUTHOR_COVER_SHAPES = ["square", "circle"] as const;

@@ -91,6 +91,36 @@ function makeBook(id: number, overrides: Partial<BookCard> = {}): BookCard {
 }
 
 describe('VirtualBookGrid', () => {
+  it('renders grouped headings and forwards the same card actions as the ordinary grid', async () => {
+    const alpha = { key: 'series:1', label: 'Crown of Ash' }
+    const none = { key: 'none', label: null }
+    const wrapper = mount(VirtualBookGrid, {
+      props: {
+        books: [makeBook(1), makeBook(2)],
+        coverSize: 120,
+        gridGap: 12,
+        seriesGridBlocks: [[alpha, none]],
+      },
+    })
+
+    expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual(['Crown of Ash', 'No Series'])
+    await wrapper.get('[data-testid="book-card"]').trigger('click')
+    expect(wrapper.emitted('action')?.[0]).toEqual([makeBook(1), 'quick-view'])
+    await wrapper.get('[data-testid="book-card-select"]').trigger('click')
+    expect(wrapper.emitted('select')?.[0]?.[0]).toBe(1)
+  })
+
+  it('asks for the immediately preceding server page at a distant grouped range', () => {
+    const books = Array.from({ length: 202 }, (_, index) => makeBook(index + 1))
+    const wrapper = mount(VirtualBookGrid, { props: { books, coverSize: 120, gridGap: 12, seriesGridBlocks: [] } })
+    const scroller = wrapper.getComponent({ name: 'RecycleScroller' })
+    const rows = scroller.props('items') as { start: number; end: number }[]
+    const rowIndex = rows.findIndex((row) => row.start === 200)
+    scroller.vm.$emit('update', rowIndex, rowIndex + 1, rowIndex, rowIndex)
+
+    expect(wrapper.emitted('range')?.[0]).toEqual([199, rows[rowIndex]!.end - 1])
+  })
+
   it('uses the virtual scroller by default', () => {
     const wrapper = mount(VirtualBookGrid, {
       props: {

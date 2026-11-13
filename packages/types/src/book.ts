@@ -204,6 +204,8 @@ export type BookCard = {
   seriesName: string | null;
   seriesIndex: SeriesIndex | null;
   seriesMemberships?: BookSeriesMembership[];
+  /** The server's primary-series grouping for Series Grid. A null label denotes books without a series. */
+  seriesGroup?: { key: string; label: string | null };
   files: BookFileRef[];
   publishedDate: string | null;
   publishedYear: number | null;
