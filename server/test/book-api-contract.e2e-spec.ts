@@ -188,6 +188,103 @@ describe('Series Grid book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }
   });
 });
 
+describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
+  it('uses every membership and ranks sibling and terminal groups by the complete filtered sort', async () => {
+    const ctx = await createMetadataWriteE2EContext();
+    const library = await createLibraryWithFolder(ctx);
+    const reader = await createUserAndLogin(ctx);
+    await grantLibraryAccess(ctx, reader.userId, library.libraryId, 'viewer');
+    const suffix = randomUUID();
+    const series = await ctx.db
+      .insert(bookSeries)
+      .values(['Universe', 'Saga', 'Trilogy', 'Arc', 'Other'].map((name) => ({ name, normalizedName: `${name.toLowerCase()}-${suffix}` })))
+      .returning({ id: bookSeries.id, name: bookSeries.name });
+    async function seed(title: string, path: number[], index: string | null, year: number) {
+      const [book] = await ctx.db
+        .insert(books)
+        .values({ libraryId: library.libraryId, libraryFolderId: library.libraryFolderId, folderPath: join(library.folderPath, title) })
+        .returning({ id: books.id });
+      await ctx.db.insert(bookMetadata).values({ bookId: book!.id, title, publishedYear: year });
+      if (path.length)
+        await ctx.db.insert(bookSeriesMemberships).values(
+          path.map((n, displayOrder) => ({
+            bookId: book!.id,
+            seriesId: series[n]!.id,
+            displayOrder,
+            seriesIndex: displayOrder === path.length - 1 ? index : '99',
+          })),
+        );
+      return book!.id;
+    }
+    async function list(payload: Record<string, unknown>): Promise<BooksPage> {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/v1/libraries/${library.libraryId}/books`,
+        headers: authHeader(reader.accessToken),
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      return response.json();
+    }
+    try {
+      const deep = await seed('Delta nested', [0, 1, 2, 3], '2', 2000);
+      const child = await seed('Beta nested', [0, 1], '1', 2000);
+      const parent = await seed('Charlie nested', [0], null, 2000);
+      const other = await seed('Alpha nested', [4], '3', 1999);
+      const standalone = await seed('Aardvark nested', [], null, 1998);
+      const query = {
+        groupBySeries: true,
+        sort: [
+          { field: 'publishedYear', dir: 'asc' },
+          { field: 'title', dir: 'desc' },
+        ],
+      };
+      const pages = await Promise.all([0, 1, 2, 3, 4].map((page) => list({ ...query, pagination: { page, size: 1 } })));
+      const cards = pages.flatMap((page) => page.items);
+      expect(cards.map((card) => card.id)).toEqual([other, deep, child, parent, standalone]);
+      expect(cards[1]!.seriesGroupPath).toEqual(series.slice(0, 4).map(({ id, name }) => ({ key: `series:${id}`, label: name })));
+      expect(cards[4]!.seriesGroupPath).toEqual([{ key: 'none', label: null }]);
+      const filtered = await list({
+        ...query,
+        q: 'nested',
+        filter: { type: 'group', join: 'AND', rules: [{ type: 'rule', field: 'title', operator: 'contains', value: 'Beta' }] },
+      });
+      expect(filtered.items.map((card) => card.id)).toEqual([child]);
+      expect(filtered.items[0]!.seriesGroupPath).toHaveLength(2);
+      const indexSort = await list({
+        groupBySeries: true,
+        sort: [
+          { field: 'seriesIndex', dir: 'asc' },
+          { field: 'title', dir: 'asc' },
+        ],
+      });
+      expect(indexSort.items.map((card) => card.id)).toEqual([child, deep, parent, other, standalone]);
+      const descending = await list({ groupBySeries: true, sort: [{ field: 'series', dir: 'desc' }] });
+      expect(descending.items[0]!.id).not.toBe(other);
+      expect(descending.items.at(-1)!.id).toBe(standalone);
+      const sortedByTitle = await list({ groupBySeries: true, sort: [{ field: 'title', dir: 'asc' }] });
+      expect(sortedByTitle.items.map((card) => card.id)).toEqual([other, child, deep, parent, standalone]);
+      const emptyPage = await list({ ...query, pagination: { page: 99, size: 1 } });
+      expect(emptyPage.total).toBe(5);
+      expect(emptyPage.items).toEqual([]);
+      const shuffledQuery = { groupBySeries: true, sort: [{ field: 'random', dir: 'asc' }], randomSeed: 17 };
+      const shuffled = await list(shuffledQuery);
+      const shuffledAgain = await list(shuffledQuery);
+      expect(shuffled.items.map((card) => card.id)).toEqual(shuffledAgain.items.map((card) => card.id));
+      expect(shuffled.items.at(-1)!.id).toBe(standalone);
+    } finally {
+      await ctx.db.delete(libraries).where(eq(libraries.id, library.libraryId));
+      await ctx.db.delete(bookSeries).where(
+        inArray(
+          bookSeries.id,
+          series.map((row) => row.id),
+        ),
+      );
+      await closeMetadataWriteE2EContext(ctx);
+    }
+  });
+});
+
 describe('Book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
   let ctx!: MetadataWriteE2EContext;
 

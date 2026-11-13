@@ -99,7 +99,7 @@ describe('VirtualBookGrid', () => {
         books: [makeBook(1), makeBook(2)],
         coverSize: 120,
         gridGap: 12,
-        seriesGridBlocks: [[alpha, none]],
+        seriesGridBlocks: [[[alpha], [none]]],
       },
     })
 
@@ -108,6 +108,17 @@ describe('VirtualBookGrid', () => {
     expect(wrapper.emitted('action')?.[0]).toEqual([makeBook(1), 'quick-view'])
     await wrapper.get('[data-testid="book-card-select"]').trigger('click')
     expect(wrapper.emitted('select')?.[0]?.[0]).toBe(1)
+  })
+
+  it('renders nested headings with full accessible depth and a single card', () => {
+    const path = Array.from({ length: 6 }, (_, index) => ({ key: `series:${index + 1}`, label: `Series ${index + 1}` }))
+    const wrapper = mount(VirtualBookGrid, {
+      props: { books: [makeBook(1)], coverSize: 120, gridGap: 12, seriesGridBlocks: [[path]] },
+    })
+
+    expect(wrapper.findAll('h2, h3, h4, h5, h6, [role="heading"]').map((heading) => heading.text())).toEqual(path.map((series) => series.label))
+    expect(wrapper.get('[role="heading"]').attributes('aria-level')).toBe('7')
+    expect(wrapper.findAll('[data-testid="book-card"]')).toHaveLength(1)
   })
 
   it('asks for the immediately preceding server page at a distant grouped range', () => {

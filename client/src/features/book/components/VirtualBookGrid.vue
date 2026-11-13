@@ -10,7 +10,7 @@ import VirtualBookGridCell from './VirtualBookGridCell.vue'
 import { cardMediaView } from '../lib/card-media'
 import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO } from '../lib/cover-aspect-ratio'
 import { BOOK_WINDOW_BLOCK_SIZE, isBookPlaceholder, type BookSlot, type SeriesGridBlock } from '../composables/useBookWindow'
-import { createSeriesGridLayout, seriesGridRowIndex } from '../lib/series-grid-layout'
+import { createSeriesGridLayout, seriesGridRowIndex, type SeriesGridRow } from '../lib/series-grid-layout'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
 
 type BookActionType = 'quick-view' | 'add-to-collection' | 'move-to-library' | 'delete'
@@ -147,6 +147,19 @@ const seriesGridRows = computed(() =>
   layoutSeriesGrid(props.seriesGridBlocks ? props.books.length : 0, props.seriesGridBlocks ?? [], gridItems.value, itemSize.value),
 )
 const seriesGridRowStyle = computed(() => ({ gridTemplateColumns: `repeat(${gridItems.value}, ${itemSecondarySize.value}px)` }))
+
+function seriesHeadingTag(depth: number) {
+  return depth < 5 ? `h${depth + 2}` : 'div'
+}
+
+function seriesHeadingStyle(row: SeriesGridRow) {
+  return { height: `${row.size}px`, paddingInlineStart: `${Math.min(row.heading?.depth ?? 0, 4) * 16}px` }
+}
+
+function seriesHeadingLabel(heading: NonNullable<SeriesGridRow['heading']>) {
+  const label = heading.label ?? t('views.bookView.seriesGrid.standalone')
+  return heading.continued ? t('views.bookView.seriesGrid.continued', { series: label }) : label
+}
 
 const scrollerStyle = computed(() => ({
   '--book-grid-gap': `${gapPx.value}px`,
@@ -297,8 +310,13 @@ watch(seriesGridRows, (rows, previousRows) => {
   const offset = top - (scroller.getItemOffset?.(oldIndex) ?? top)
   const bookIndex = Math.min(previousRow.start, props.books.length - 1)
   let nextIndex = seriesGridRowIndex(rows, bookIndex)
-  if (previousRow.heading && rows[nextIndex - 1]?.heading?.key === previousRow.heading.key && rows[nextIndex - 1]?.start === bookIndex) {
-    nextIndex--
+  if (previousRow.heading) {
+    for (let index = nextIndex - 1; rows[index]?.start === bookIndex && rows[index]?.heading; index--) {
+      if (rows[index]?.id === previousRow.id && rows[index]?.heading?.key === previousRow.heading.key) {
+        nextIndex = index
+        break
+      }
+    }
   }
   void nextTick(() => {
     if (rows !== seriesGridRows.value) return
@@ -387,14 +405,17 @@ defineExpose({ scrollToIndex })
       @update="handleSeriesGridUpdate"
     >
       <template #default="{ item }">
-        <div v-if="item.heading" class="flex items-center pb-2" :style="{ height: `${item.size}px` }">
-          <h2 class="w-full truncate border-b border-border pb-2 text-sm font-semibold text-foreground" :title="item.heading.label ?? undefined">
-            {{
-              item.heading.continued
-                ? t('views.bookView.seriesGrid.continued', { series: item.heading.label ?? t('views.bookView.seriesGrid.standalone') })
-                : (item.heading.label ?? t('views.bookView.seriesGrid.standalone'))
-            }}
-          </h2>
+        <div v-if="item.heading" class="flex items-center pb-2" :style="seriesHeadingStyle(item)">
+          <component
+            :is="seriesHeadingTag(item.heading.depth)"
+            class="w-full truncate border-b border-border pb-2 text-sm text-foreground"
+            :class="item.heading.depth === 0 ? 'font-semibold' : 'font-medium'"
+            :role="item.heading.depth >= 5 ? 'heading' : undefined"
+            :aria-level="item.heading.depth >= 5 ? item.heading.depth + 2 : undefined"
+            :title="seriesHeadingLabel(item.heading)"
+          >
+            {{ seriesHeadingLabel(item.heading) }}
+          </component>
         </div>
         <div v-else class="grid" :style="seriesGridRowStyle">
           <div

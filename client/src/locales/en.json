@@ -15106,7 +15106,8 @@
       "allBooksLoaded": "All {count} books loaded",
       "seriesGrid": {
         "standalone": "Standalone",
-        "continued": "{series} (continued)"
+        "continued": "{series} (continued)",
+        "sortHint": "Sort levels apply to books and to series at each level. The Series field sorts by the series name at that level."
       }
     },
     "notFound": {

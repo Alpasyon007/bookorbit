@@ -214,6 +214,52 @@ describe('useBookWindow', () => {
     expect((window.slots.value[2] as BookCard).title).toBe('Renamed')
   })
 
+  it('reloads grouped placement after a nested membership change', async () => {
+    const primary = { seriesId: 1, seriesName: 'Parent', seriesIndex: '1', displayOrder: 0, expectedBookCount: null }
+    const child = { seriesId: 2, seriesName: 'Child', seriesIndex: '2', displayOrder: 1, expectedBookCount: null }
+    const current = makeBook(1, { seriesId: 1, seriesMemberships: [primary, child] })
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ...pageFor(0, 1), items: [current] }) })
+    const { window, query } = makeWindow()
+    query.value = { sort: [], groupBySeries: true }
+    await flush()
+    fetchMock.mockClear()
+
+    window.updateBook({ ...current, seriesMemberships: [primary, { ...child, seriesIndex: '3' }] })
+    await flush()
+
+    expect(requestedBlocks()).toEqual([0])
+  })
+
+  it('reloads grouped placement when an edit can change its sort rank', async () => {
+    mockBlocks(2)
+    const { window, query } = makeWindow()
+    query.value = { sort: [{ field: 'rating', dir: 'desc' }], groupBySeries: true }
+    await flush()
+    fetchMock.mockClear()
+
+    window.updateBook(makeBook(1, { rating: 5 }))
+    await flush()
+
+    expect(requestedBlocks()).toEqual([0])
+  })
+
+  it('reloads grouped placement when an edit can change whether it passes a filter', async () => {
+    mockBlocks(2)
+    const { window, query } = makeWindow()
+    query.value = {
+      sort: [],
+      groupBySeries: true,
+      filter: { type: 'group', join: 'AND', rules: [{ type: 'rule', field: 'genre', operator: 'includesAny', value: ['Mystery'] }] },
+    }
+    await flush()
+    fetchMock.mockClear()
+
+    window.updateBook(makeBook(1, { genres: ['Fantasy'] }))
+    await flush()
+
+    expect(requestedBlocks()).toEqual([0])
+  })
+
   it('removeBooks splices slots and keeps total aligned with server indexes', async () => {
     mockBlocks(150)
     const { window } = makeWindow()

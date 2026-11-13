@@ -1354,11 +1354,16 @@ export class BookService {
       ...(options?.defaultCollectionId !== undefined ? { defaultCollectionId: options.defaultCollectionId } : {}),
       ...(query.randomSeed !== undefined ? { randomSeed: query.randomSeed } : {}),
       ...(query.q !== undefined ? { query: query.q } : {}),
+      ...(query.groupBySeries ? { groupBySeries: true } : {}),
     });
     const cardQuery = { where, orderBy, limit: size, offset: page * size, userId, ...(query.groupBySeries ? { groupBySeries: true } : {}) };
     let bookTotal: number | undefined;
     let cardPage: Awaited<ReturnType<BookRepository['findCards']>>;
-    if (collapseLinked) {
+    if (query.groupBySeries) {
+      const grouped = await this.bookRepo.findSeriesGridCards({ ...cardQuery, collapseLinked });
+      cardPage = grouped;
+      bookTotal = grouped.bookTotal;
+    } else if (collapseLinked) {
       const folded = await this.bookRepo.findCardsLinkCollapsed(cardQuery);
       cardPage = folded;
       bookTotal = folded.bookTotal;

@@ -21,6 +21,7 @@ export type BookSortContext = {
   /** Seed for the `random` sort field. See `resolveRandomSortSeed`. */
   randomSeed?: number;
   query?: string;
+  groupBySeries?: boolean;
 };
 
 /**
@@ -172,12 +173,19 @@ export class BookSortBuilder {
       case 'publishedYear':
         result.push(sql`${bookMetadata.publishedYear} ${sql.raw(D)} NULLS LAST`);
         break;
-      case 'seriesIndex':
-        result.push(...seriesIndexOrderBy(bookMetadata.seriesIndex, D));
-        if (!allSorts.some((s) => s.field === 'series')) {
+      case 'series':
+        if (context?.groupBySeries) {
+          result.push(sql`series_grid.names ${sql.raw(D)} NULLS LAST`);
+        } else result.push(sql`${bookMetadata.seriesName} ${sql.raw(D)} NULLS LAST`);
+        break;
+      case 'seriesIndex': {
+        const index = context?.groupBySeries ? sql`series_grid.leaf_index` : bookMetadata.seriesIndex;
+        result.push(...seriesIndexOrderBy(index, D));
+        if (!context?.groupBySeries && !allSorts.some((s) => s.field === 'series')) {
           result.push(sql`${bookMetadata.seriesName} ${sql.raw(D)} NULLS LAST`);
         }
         break;
+      }
       case 'format':
         result.push(sql.raw(`(SELECT bf.format FROM book_files bf WHERE bf.id = books.primary_file_id) ${D} NULLS LAST`));
         break;

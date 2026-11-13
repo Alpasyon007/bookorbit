@@ -10,10 +10,29 @@ export type BookWindowQuery = Omit<BookQuery, 'pagination'>
 
 export type BookPlaceholder = { id: number; placeholder: true }
 export type BookSlot = BookCard | BookPlaceholder
-export type SeriesGridBlock = readonly BookCard['seriesGroup'][]
+export type SeriesGridPath = Readonly<NonNullable<BookCard['seriesGroupPath']>>
+export type SeriesGridBlock = readonly (SeriesGridPath | undefined)[]
 
 export function isBookPlaceholder(slot: BookSlot): slot is BookPlaceholder {
   return (slot as BookPlaceholder).placeholder === true
+}
+
+function seriesMembershipsChanged(previous: BookCard, next: BookCard): boolean {
+  if (previous.seriesId !== next.seriesId || previous.seriesName !== next.seriesName || previous.seriesIndex !== next.seriesIndex) return true
+  const left = previous.seriesMemberships ?? []
+  const right = next.seriesMemberships ?? []
+  return (
+    left.length !== right.length ||
+    left.some((entry, index) => {
+      const other = right[index]!
+      return (
+        entry.seriesId !== other.seriesId ||
+        entry.seriesName !== other.seriesName ||
+        entry.seriesIndex !== other.seriesIndex ||
+        entry.displayOrder !== other.displayOrder
+      )
+    })
+  )
 }
 
 function canonicalizeQueryValue(value: unknown): unknown {
@@ -118,7 +137,10 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
       const next = resizeSlots(swapPending ? [] : slots.value, data.total)
       if (body.groupBySeries) {
         const nextBlocks = swapPending ? [] : seriesGridBlocks.value.slice(0, Math.ceil(data.total / BOOK_WINDOW_BLOCK_SIZE))
-        nextBlocks[block] = data.items.map((card) => card.seriesGroup)
+        nextBlocks[block] = data.items.map((card) => {
+          if (card.seriesGroupPath?.length) return card.seriesGroupPath
+          return card.seriesGroup ? [card.seriesGroup] : undefined
+        })
         seriesGridBlocks.value = nextBlocks
       } else if (seriesGridBlocks.value.length > 0) {
         seriesGridBlocks.value = []
@@ -258,16 +280,22 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
     if (cards.length === 0) return
     const byId = new Map(cards.map((card) => [card.id, card]))
     let changed = false
-    let seriesChanged = false
+    let refreshGroupedListing = false
+    const { groupBySeries, sort, filter, q, collapseLinked } = options.query.value
+    const groupingDependsOnMetadata = sort.length > 0 || filter !== undefined || Boolean(q) || collapseLinked === true
     const next = slots.value.map((slot) => {
       if (isBookPlaceholder(slot)) return slot
       const replacement = byId.get(slot.id)
       if (!replacement || replacement === slot) return slot
       changed = true
-      seriesChanged ||= slot.seriesId !== replacement.seriesId || slot.seriesName !== replacement.seriesName
+      if (groupBySeries) {
+        // Filter and sort values can affect both membership in the listing and the rank of its parent groups.
+        refreshGroupedListing ||=
+          seriesMembershipsChanged(slot, replacement) || (groupingDependsOnMetadata && JSON.stringify(slot) !== JSON.stringify(replacement))
+      }
       return replacement
     })
-    if (seriesChanged && options.query.value.groupBySeries) reset()
+    if (refreshGroupedListing) reset()
     else if (changed) slots.value = next
   }
 

@@ -1,7 +1,6 @@
-import type { BookCard } from '@bookorbit/types'
-import { BOOK_WINDOW_BLOCK_SIZE, type SeriesGridBlock } from '../composables/useBookWindow'
+import { BOOK_WINDOW_BLOCK_SIZE, type SeriesGridBlock, type SeriesGridPath } from '../composables/useBookWindow'
 
-type SeriesGridHeading = NonNullable<BookCard['seriesGroup']> & { continued: boolean }
+type SeriesGridHeading = SeriesGridPath[number] & { depth: number; continued: boolean }
 
 export type SeriesGridRow = {
   id: string
@@ -12,32 +11,42 @@ export type SeriesGridRow = {
 }
 
 const HEADING_HEIGHT = 40
+const EMPTY_PATH: SeriesGridPath = []
 
-function layoutBlock(
-  offset: number,
-  count: number,
-  block: SeriesGridBlock | undefined,
-  previousKey: string | undefined,
-  columns: number,
-  size: number,
-) {
+function commonPathLength(left: SeriesGridPath, right: SeriesGridPath): number {
+  const max = Math.min(left.length, right.length)
+  let length = 0
+  while (length < max && left[length]!.key === right[length]!.key) length++
+  return length
+}
+
+function layoutBlock(offset: number, count: number, block: SeriesGridBlock | undefined, previousPath: SeriesGridPath, columns: number, size: number) {
   const rows: SeriesGridRow[] = []
   let start = 0
   while (start < count) {
-    const group = block?.[start]
-    const beginsGroup = start === 0 || block?.[start - 1]?.key !== group?.key
-    if (group && beginsGroup) {
+    const path = block?.[start] ?? EMPTY_PATH
+    const before = start === 0 ? previousPath : (block?.[start - 1] ?? EMPTY_PATH)
+    const sharedDepth = commonPathLength(before, path)
+    const returnsToAncestor = path.length < before.length && sharedDepth === path.length
+    const firstHeading = start === 0 ? 0 : returnsToAncestor ? Math.max(0, sharedDepth - 1) : sharedDepth
+
+    for (let depth = firstHeading; depth < path.length; depth++) {
+      const group = path[depth]!
       rows.push({
-        id: `heading:${offset + start}`,
+        id: `heading:${offset + start}:${depth}`,
         start: offset + start,
         end: offset + start + 1,
         size: HEADING_HEIGHT,
-        heading: { ...group, continued: start === 0 && previousKey === group.key },
+        heading: { ...group, depth, continued: depth < sharedDepth },
       })
     }
     const rowLimit = Math.min(start + columns, count)
     let end = start + 1
-    while (end < rowLimit && block?.[end]?.key === group?.key) end++
+    while (end < rowLimit) {
+      const next = block?.[end] ?? EMPTY_PATH
+      if (next.length !== path.length || commonPathLength(path, next) !== path.length) break
+      end++
+    }
     rows.push({ id: `row:${offset + start}`, start: offset + start, end: offset + end, size })
     start = end
   }
@@ -45,7 +54,7 @@ function layoutBlock(
 }
 
 export function createSeriesGridLayout() {
-  const cache: { count: number; block: SeriesGridBlock | undefined; previousKey: string | undefined; rows: SeriesGridRow[] }[] = []
+  const cache: { count: number; block: SeriesGridBlock | undefined; previousPath: SeriesGridPath; rows: SeriesGridRow[] }[] = []
   let previousColumns = 0
   let previousSize = 0
 
@@ -63,10 +72,10 @@ export function createSeriesGridLayout() {
       const offset = index * BOOK_WINDOW_BLOCK_SIZE
       const count = Math.min(total - offset, BOOK_WINDOW_BLOCK_SIZE)
       const block = blocks[index]
-      const previousKey = block ? blocks[index - 1]?.at(-1)?.key : undefined
+      const previousPath = (block ? blocks[index - 1]?.at(-1) : undefined) ?? EMPTY_PATH
       let cached = cache[index]
-      if (!cached || cached.count !== count || cached.block !== block || cached.previousKey !== previousKey) {
-        cached = { count, block, previousKey, rows: layoutBlock(offset, count, block, previousKey, columns, size) }
+      if (!cached || cached.count !== count || cached.block !== block || cached.previousPath !== previousPath) {
+        cached = { count, block, previousPath, rows: layoutBlock(offset, count, block, previousPath, columns, size) }
         cache[index] = cached
       }
       rows.push(...cached.rows)

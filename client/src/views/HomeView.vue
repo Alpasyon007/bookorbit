@@ -830,6 +830,7 @@ defineOptions({ name: 'HomeView' })
             :changed="!isDefaultSort"
             @toggle-direction="toggleSortDirection"
           >
+            <p v-if="seriesGrid" class="mb-2 text-xs text-muted-foreground">{{ t('views.bookView.seriesGrid.sortHint') }}</p>
             <BookSortBuilder v-model="localSortModel" />
             <button
               v-if="!isDefaultSort"

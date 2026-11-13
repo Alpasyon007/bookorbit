@@ -196,6 +196,61 @@ describe('useBookViewWindow', () => {
     expect(listRequestBodies().at(-1)).not.toHaveProperty('groupBySeries')
   })
 
+  it('replaces grouped cards and paths when the filter and ordered sort levels change during a fetch', async () => {
+    const previousPath = [
+      { key: 'old-root', label: 'Old root' },
+      { key: 'old-child', label: 'Old child' },
+    ]
+    const currentPath = [
+      { key: 'root', label: 'Root' },
+      { key: 'child', label: 'Child' },
+    ]
+    let resolvePrevious!: (value: unknown) => void
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePrevious = resolve
+      }),
+    )
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ...pageFor(0, 1), items: [{ ...makeBook(2), seriesGroupPath: currentPath }] }),
+    })
+    const { win } = setup({ viewMode: 'series-grid', q: 'Dune' })
+    const filter: GroupRule = {
+      type: 'group',
+      join: 'AND',
+      rules: [
+        { type: 'rule', field: 'format', operator: 'includesAny', value: ['epub'] },
+        {
+          type: 'group',
+          join: 'OR',
+          rules: [
+            { type: 'rule', field: 'genre', operator: 'includesAny', value: ['Science fiction'] },
+            { type: 'rule', field: 'author', operator: 'contains', value: 'Herbert' },
+          ],
+        },
+      ],
+    }
+    const sort: SortSpec[] = [
+      { field: 'rating', dir: 'desc' },
+      { field: 'seriesIndex', dir: 'asc' },
+      { field: 'title', dir: 'desc' },
+    ]
+    win.filter.value = filter
+    win.sort.value = sort
+    await flush()
+
+    expect(listRequestBodies()).toHaveLength(2)
+    expect(listRequestBodies()[1]).toMatchObject({ groupBySeries: true, filter, sort, q: 'Dune', pagination: { page: 0, size: 100 } })
+    expect(fetchMock.mock.calls[0]![1]?.signal?.aborted).toBe(true)
+
+    resolvePrevious({ ok: true, json: async () => ({ ...pageFor(0, 1), items: [{ ...makeBook(1), seriesGroupPath: previousPath }] }) })
+    await flush()
+
+    expect(win.loadedCards.value.map((book) => book.id)).toEqual([2])
+    expect(win.seriesGridBlocks.value).toEqual([[currentPath]])
+  })
+
   it('sends the supplied default sort and hides the rail for collection order', async () => {
     mockApi(250)
     const { win } = setup({ viewMode: 'grid', defaultSort: COLLECTION_DEFAULT_SORT })

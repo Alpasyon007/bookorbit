@@ -204,8 +204,10 @@ export type BookCard = {
   seriesName: string | null;
   seriesIndex: SeriesIndex | null;
   seriesMemberships?: BookSeriesMembership[];
-  /** The server's primary-series grouping for Series Grid. A null label denotes books without a series. */
+  /** The outer Series Grid group. A null label denotes books without a series. */
   seriesGroup?: { key: string; label: string | null };
+  /** Ordered memberships from the outer group through the innermost group. */
+  seriesGroupPath?: { key: string; label: string | null }[];
   files: BookFileRef[];
   publishedDate: string | null;
   publishedYear: number | null;

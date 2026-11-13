@@ -14,7 +14,7 @@ import type {
   TemporalJumpBucketPrecision,
   TemporalJumpBucketUnit,
 } from '@bookorbit/types';
-import type { BookCardLinkInfo, UnscopedBookRecommendation } from '@bookorbit/types';
+import type { BookCard, BookCardLinkInfo, UnscopedBookRecommendation } from '@bookorbit/types';
 import { READ_ALONG_FORMAT_PRIORITY, getBookMediaKind, isAudioFormat, isComicFormat, normalizeCoverAspectRatio } from '@bookorbit/types';
 import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
 import { rankFileRowsByBook } from '../../common/utils/primary-file-selection.utils';
@@ -29,7 +29,7 @@ import { SeriesMembershipService } from '../../common/services/series-membership
 import { BookQueryBuilder } from './book-query-builder.service';
 import { letterJumpBucketExpr } from './jump-bucket-expr';
 import { LINK_FOLDED_BY_PREFERENCE_SQL, LINK_FOLDED_BY_SORT_SQL, LINK_FOLDED_COUNT_SQL, linkMembersCte } from './link-collapse-sql';
-import { seriesGridGroupKey, seriesGridGroupLabel, seriesGridGroupOrder, seriesGridSeriesJoin } from './series-grid-sql';
+import { buildSeriesGridPageSql } from './series-grid-sql';
 import { preserveOutgoingChapters } from '../../db/preserve-audiobook-revision';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
@@ -574,8 +574,8 @@ export class BookRepository {
     return this.db.transaction((tx) => callback(tx));
   }
 
-  async findCards(opts: { where: SQL | undefined; orderBy: SQL[]; limit: number; offset: number; userId: number; groupBySeries?: boolean }) {
-    const { where, orderBy, limit, offset, userId, groupBySeries } = opts;
+  async findCards(opts: { where: SQL | undefined; orderBy: SQL[]; limit: number; offset: number; userId: number }) {
+    const { where, orderBy, limit, offset, userId } = opts;
     const visibleWhere = this.visibleWhere(where);
 
     const query = this.db
@@ -592,7 +592,6 @@ export class BookRepository {
         seriesId: bookMetadata.seriesId,
         seriesName: bookMetadata.seriesName,
         seriesIndex: bookMetadata.seriesIndex,
-        ...(groupBySeries ? { seriesGroupKey: seriesGridGroupKey, seriesGroupLabel: seriesGridGroupLabel } : {}),
         publishedDate: bookMetadata.publishedDate,
         publishedYear: bookMetadata.publishedYear,
         language: bookMetadata.language,
@@ -613,10 +612,10 @@ export class BookRepository {
       .leftJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
       .leftJoin(userBookRatings, and(eq(userBookRatings.bookId, books.id), eq(userBookRatings.userId, userId)))
       .where(visibleWhere)
-      .orderBy(...(groupBySeries ? [...seriesGridGroupOrder, ...orderBy] : orderBy))
+      .orderBy(...orderBy)
       .limit(limit)
       .offset(offset);
-    const rows = groupBySeries ? await query.$dynamic().leftJoin(bookSeries, seriesGridSeriesJoin) : await query;
+    const rows = await query;
 
     const total = rows.length > 0 ? rows[0]._total : await this.countWhere(visibleWhere);
 
@@ -624,6 +623,41 @@ export class BookRepository {
     const enrichment = await this.enrichBookIds(bookRefs, userId);
 
     return { rows, ...enrichment, total: Number(total) };
+  }
+
+  async findSeriesGridCards(opts: {
+    where: SQL | undefined;
+    orderBy: SQL[];
+    limit: number;
+    offset: number;
+    userId: number;
+    collapseLinked: boolean;
+  }) {
+    const visibleWhere = this.visibleWhere(opts.where);
+    const link = this.seriesCollapseLinkParts(visibleWhere, opts.collapseLinked);
+    const result = await this.db.execute<{
+      id: number | null;
+      path: BookCard['seriesGroupPath'] | null;
+      total: string;
+      book_total: string;
+    }>(buildSeriesGridPageSql(link, opts.orderBy, opts.limit, opts.offset));
+    const entries = result.rows.filter((row) => row.id !== null);
+    const ids = entries.map((row) => Number(row.id));
+    const cards = await this.findCardsByBookIds(ids, opts.userId);
+    const byId = new Map(cards.rows.map((row) => [row.id, row]));
+    const rows = entries.flatMap((entry) => {
+      const row = byId.get(Number(entry.id));
+      if (!row) return [];
+      return [
+        {
+          ...row,
+          seriesGroupKey: entry.path?.[0]?.key ?? 'none',
+          seriesGroupLabel: entry.path?.[0]?.label ?? null,
+          seriesGroupPath: entry.path ?? [{ key: 'none', label: null }],
+        },
+      ];
+    });
+    return { ...cards, rows, total: Number(result.rows[0]?.total ?? 0), bookTotal: Number(result.rows[0]?.book_total ?? 0) };
   }
 
   /**
@@ -657,12 +691,10 @@ export class BookRepository {
     limit: number;
     offset: number;
     userId: number;
-    groupBySeries?: boolean;
   }): Promise<Awaited<ReturnType<BookRepository['findCards']>> & { bookTotal: number }> {
-    const { where, orderBy, limit, offset, userId, groupBySeries } = opts;
+    const { where, orderBy, limit, offset, userId } = opts;
     const visibleWhere = this.visibleWhere(where);
-    const link = groupBySeries ? this.seriesCollapseLinkParts(visibleWhere, true) : this.flatLinkParts(visibleWhere, orderBy);
-    const pageOrder = groupBySeries ? [...seriesGridGroupOrder, ...orderBy] : orderBy;
+    const link = this.flatLinkParts(visibleWhere, orderBy);
     const page = await this.db.execute<{ card_id: number; total_count: string; folded_count: string }>(sql`
       WITH ${link.prefixCte}
       folded AS (SELECT ${LINK_FOLDED_COUNT_SQL} AS folded_count)
@@ -672,12 +704,11 @@ export class BookRepository {
         folded.folded_count
       FROM books
       LEFT JOIN book_metadata ON book_metadata.book_id = books.id
-      ${groupBySeries ? sql`LEFT JOIN ${bookSeries} ON ${seriesGridSeriesJoin}` : sql``}
       LEFT JOIN link_members member ON member.id = books.id AND member.matched_members > 1
       LEFT JOIN link_members rep ON rep.group_id = member.group_id AND rep.pref_rn = 1
       CROSS JOIN folded
       WHERE ${link.where}
-      ORDER BY ${sql.join(pageOrder, sql`, `)}
+      ORDER BY ${sql.join(orderBy, sql`, `)}
       LIMIT ${limit} OFFSET ${offset}
     `);
 
@@ -706,7 +737,6 @@ export class BookRepository {
       limit: cardIds.length,
       offset: 0,
       userId,
-      ...(groupBySeries ? { groupBySeries } : {}),
     });
     const position = new Map(cardIds.map((id, index) => [id, index]));
     const rows = cards.rows.slice().sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));

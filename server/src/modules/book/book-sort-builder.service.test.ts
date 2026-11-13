@@ -84,6 +84,28 @@ describe('BookSortBuilder', () => {
     expect(raw).toHaveBeenNthCalledWith(2, 'DESC');
   });
 
+  it('preserves sort tiers and uses the precomputed leaf index in grouped mode', () => {
+    const result = service.build(
+      [
+        { field: 'publishedYear', dir: 'asc' },
+        { field: 'seriesIndex', dir: 'desc' },
+        { field: 'title', dir: 'asc' },
+      ],
+      7,
+      undefined,
+      { groupBySeries: true },
+    );
+    expect(result).toHaveLength(5);
+    expect(result[1]?.values[0]?.values[0]).toMatchObject({ text: 'series_grid.leaf_index' });
+    expect(result[2]?.values[0]).toMatchObject({ text: 'series_grid.leaf_index' });
+    expect(result[3]).toMatchObject({ text: '  NULLS LAST', values: [expect.anything(), { type: 'raw', value: 'ASC' }] });
+  });
+
+  it('uses the precomputed hierarchy names for an explicit grouped series sort', () => {
+    const result = service.build([{ field: 'series', dir: 'desc' }], 7, undefined, { groupBySeries: true });
+    expect(result[0]).toMatchObject({ text: 'series_grid.names  NULLS LAST' });
+  });
+
   it('builds weighted relevance sorting when a query is present', () => {
     const raw = (sql as unknown as { raw: vi.Mock }).raw;
 
