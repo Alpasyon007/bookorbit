@@ -52,21 +52,23 @@ describe('ReleaseNotesService fork versions', () => {
 
   it.each(['v3.8.0-custom.1', 'v3.8.0.1'])('caps upstream highlights at the base of running %s', async (currentVersion) => {
     const service = await createService(currentVersion, ['v3.9.0', 'v3.8.1', 'v3.8.0', 'v3.7.0']);
-    expect((await service.getSince(null)).releases.map((release) => release.version)).toEqual(['v3.8.0', 'v3.7.0']);
+    expect((await service.getSince(null)).releases.map((release) => release.version)).toEqual(['v3.8.0-custom.1', 'v3.8.0', 'v3.7.0']);
   });
 
   it('does not repeat upstream highlights when only the custom revision changes', async () => {
     const service = await createService('v3.8.0-custom.2', ['v3.8.1', 'v3.8.0', 'v3.7.0']);
-    expect((await service.getSince('v3.8.0-custom.1')).releases).toEqual([]);
+    expect((await service.getSince('v3.8.0-custom.1')).releases.map((release) => release.version)).toEqual(['v3.8.0-custom.2']);
   });
 
   it.each(['v3.8.0-custom.1', 'v3.8.0.1'])('advances from saved baseline %s while excluding future releases', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.10.0', 'v3.9.0', 'v3.8.1', 'v3.8.0']);
-    expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(['v3.9.0', 'v3.8.1']);
+    expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(['v3.8.0-custom.2', 'v3.9.0', 'v3.8.1']);
   });
 
   it.each([null, 'v3.8.0-custom.1'])('rejects malformed release candidates and legacy four-part upstream tags with baseline %s', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.9.0-custom.0', 'v3.9.0junk', 'v3.8.0.2', 'v3.8.1']);
-    expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(['v3.8.1']);
+    expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(
+      since ? ['v3.8.0-custom.2', 'v3.8.1'] : ['v3.8.0-custom.2', 'v3.8.0-custom.1', 'v3.8.1'],
+    );
   });
 });

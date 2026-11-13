@@ -1,3 +1,5 @@
+import { isNewerCustomRelease } from './custom-release-version'
+
 export function isSemverTag(value: string | null | undefined): boolean {
   return !!value && /^v\d+\.\d+\.\d+/.test(value.trim())
 }
@@ -12,6 +14,8 @@ export function parseSemver(value: string): [number, number, number] | null {
 }
 
 export function isNewer(candidate: string, baseline: string): boolean {
+  const customResult = isNewerCustomRelease(candidate, baseline)
+  if (customResult !== null) return customResult
   const a = parseSemver(candidate)
   const b = parseSemver(baseline)
   if (!a || !b) return false

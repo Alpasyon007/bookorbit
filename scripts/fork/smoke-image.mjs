@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
+import { parseCustomVersion } from "./release-version.mjs";
+
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 function validateOptions({ baseUrl, expectedVersion, setupToken, readyTimeoutMs, pollIntervalMs, requestTimeoutMs }) {
@@ -79,6 +81,67 @@ async function waitUntilHealthy(origin, { readyTimeoutMs, pollIntervalMs, reques
   throw new Error("Container did not become healthy before the readiness deadline");
 }
 
+function releasePage(response) {
+  assert.ok(response && Array.isArray(response.releases), "Release notes must return a releases array");
+  assert.equal(typeof response.hasMore, "boolean", "Release notes must return a pagination flag");
+  assert.ok(
+    response.releases.every((release) => release && typeof release.version === "string"),
+    "Every release note must identify its version",
+  );
+  return response;
+}
+
+function currentCustomNote(releases, expectedVersion) {
+  const current = releases.filter((release) => release.version === expectedVersion);
+  assert.equal(current.length, 1, "Running custom release must appear exactly once in its release notes");
+  const note = current[0];
+  assert.ok(typeof note.name === "string" && note.name.trim(), "Custom release notes must have a title");
+  assert.ok(Array.isArray(note.highlights) && note.highlights.length > 0, "Custom release notes must have highlights");
+  assert.ok(
+    note.highlights.every(
+      (highlight) => typeof highlight?.title === "string" && highlight.title.trim() && typeof highlight.body === "string" && highlight.body.trim(),
+    ),
+    "Custom release highlights must have nonempty titles and bodies",
+  );
+  assert.ok(typeof note.changelogBody === "string" && note.changelogBody.trim(), "Custom release notes must include a changelog body");
+  const source = new URL(note.changelogUrl);
+  assert.ok(
+    source.protocol === "https:" &&
+      source.hostname === "github.com" &&
+      !source.username &&
+      !source.password &&
+      /^\/alpasyon007\/bookorbit\/.+/i.test(source.pathname),
+    "Custom release changelog must link to the fork source",
+  );
+  return note;
+}
+
+async function checkReleaseNotes(call, token, expectedVersion) {
+  const updateSetting = await call("/api/v1/app-settings/update_check_enabled", { method: "PATCH", token, body: { value: "false" } });
+  assert.equal(updateSetting.key, "update_check_enabled", "Smoke must update only the upstream update-check setting");
+  assert.equal(updateSetting.value, "false", "Upstream update checks must be disabled for deterministic bundled-note verification");
+  const archive = releasePage(await call("/api/v1/release-notes?page=1", { token }));
+  if (!expectedVersion.includes("-custom.")) return;
+  const version = parseCustomVersion(expectedVersion);
+  currentCustomNote(archive.releases, expectedVersion);
+  const nextPage = releasePage(await call("/api/v1/release-notes?page=2", { token }));
+  assert.ok(
+    nextPage.releases.every((release) => release.version !== expectedVersion),
+    "Running custom release must not repeat on the next archive page",
+  );
+  if (version.revision > 1) {
+    const since = `${version.upstreamVersion}-custom.${version.revision - 1}`;
+    const updates = releasePage(await call(`/api/v1/release-notes?since=${encodeURIComponent(since)}`, { token }));
+    currentCustomNote(updates.releases, expectedVersion);
+    assert.deepEqual(
+      updates.releases.map((release) => release.version),
+      [expectedVersion],
+      "Custom revision updates must not repeat baseline, older, or upstream release notes",
+    );
+    assert.equal(updates.hasMore, false, "One custom revision update must not claim additional release notes");
+  }
+}
+
 export async function smokeImage({
   baseUrl,
   expectedVersion,
@@ -123,6 +186,7 @@ export async function smokeImage({
   assert.deepEqual(await call("/api/v1/books/search?q=fork-smoke&limit=1", { token }), [], "Empty-library search must succeed");
   const info = await call("/api/v1/app-info", { token });
   assert.equal(info.version, expectedVersion, "Running container version must match the tested image version");
+  await checkReleaseNotes(call, token, expectedVersion);
 
   const html = await call("/", { text: true });
   assert.match(html.contentType, /text\/html/i, "Production image must serve the client HTML");
@@ -133,7 +197,10 @@ export async function smokeImage({
   assert.match(asset.contentType, /(?:java|ecma)script/i, "Built client module must be served as JavaScript");
   assert.ok(asset.content.length > 0, "Built client module must not be empty");
 
-  return { version: info.version, checks: ["health", "fresh-setup", "login", "session", "browse", "search", "version", "client-assets"] };
+  return {
+    version: info.version,
+    checks: ["health", "fresh-setup", "login", "session", "browse", "search", "version", "release-notes", "client-assets"],
+  };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

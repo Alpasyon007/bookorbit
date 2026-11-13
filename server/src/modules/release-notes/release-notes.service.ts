@@ -6,6 +6,7 @@ import type { ReleaseNote, ReleaseNotesResponse } from '@bookorbit/types';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { parseUpstreamBaseVersion } from '../../common/utils/upstream-version.utils';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import { getCustomReleaseNotes, isCustomReleaseLabel } from './custom-releases/custom-releases';
 import { parseHighlights, stripHighlightsSection } from './highlights.parser';
 import {
   CUMULATIVE_VERSION_CAP,
@@ -34,7 +35,8 @@ export class ReleaseNotesService {
     const current = this.config.get<string>('app.version') ?? '';
     const capByCurrent = parseUpstreamBaseVersion(current) !== null;
 
-    const eligible = all.filter((r) => {
+    const upstream = all.filter((r) => {
+      if (isCustomReleaseLabel(r.version)) return false;
       if (r.highlights.length === 0) return false;
       if (!SEMVER_RE.test(r.version) || !parseUpstreamBaseVersion(r.version)) return false;
       if (since && !this.isNewer(r.version, since)) return false;
@@ -43,14 +45,21 @@ export class ReleaseNotesService {
       return true;
     });
 
+    const custom = getCustomReleaseNotes(current, since);
+    const eligible = [...custom, ...upstream];
     const releases = eligible.slice(0, CUMULATIVE_VERSION_CAP);
     return { releases, hasMore: eligible.length > releases.length };
   }
 
   async getAll(page: number): Promise<ReleaseNotesResponse> {
     const safePage = Number.isInteger(page) && page > 0 ? page : 1;
-    const releases = await this.getPage(safePage);
-    return { releases, hasMore: releases.length >= RELEASE_NOTES_PER_PAGE };
+    const upstream = await this.getPage(safePage);
+    const custom = getCustomReleaseNotes(this.config.get<string>('app.version') ?? '');
+    const customPage = custom.slice((safePage - 1) * RELEASE_NOTES_PER_PAGE, safePage * RELEASE_NOTES_PER_PAGE);
+    return {
+      releases: [...customPage, ...upstream.filter((release) => !isCustomReleaseLabel(release.version))],
+      hasMore: custom.length > safePage * RELEASE_NOTES_PER_PAGE || upstream.length >= RELEASE_NOTES_PER_PAGE,
+    };
   }
 
   private async getPage(page: number): Promise<ReleaseNote[]> {
