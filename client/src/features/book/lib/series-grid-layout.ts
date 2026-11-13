@@ -1,4 +1,4 @@
-import { BOOK_WINDOW_BLOCK_SIZE, DIRECT_SERIES_BOOKS_KEY, type SeriesGridBlock, type SeriesGridPath } from '../composables/useBookWindow'
+import { BOOK_WINDOW_BLOCK_SIZE, type SeriesGridBlock, type SeriesGridPath } from '../composables/useBookWindow'
 
 type SeriesGridHeading = SeriesGridPath[number] & { depth: number; continued: boolean }
 
@@ -20,7 +20,19 @@ function commonPathLength(left: SeriesGridPath, right: SeriesGridPath): number {
   return length
 }
 
-function layoutBlock(offset: number, count: number, block: SeriesGridBlock | undefined, previousPath: SeriesGridPath, columns: number, size: number) {
+function samePath(left: SeriesGridPath, right: SeriesGridPath): boolean {
+  return left.length === right.length && commonPathLength(left, right) === left.length
+}
+
+function layoutBlock(
+  offset: number,
+  count: number,
+  block: SeriesGridBlock | undefined,
+  previousPath: SeriesGridPath,
+  previousRowStart: number | undefined,
+  columns: number,
+  size: number,
+) {
   const rows: SeriesGridRow[] = []
   let start = 0
   while (start < count) {
@@ -28,9 +40,7 @@ function layoutBlock(offset: number, count: number, block: SeriesGridBlock | und
     const before = start === 0 ? previousPath : (block?.[start - 1] ?? EMPTY_PATH)
     const sharedDepth = commonPathLength(before, path)
     const returnsToAncestor = path.length < before.length && sharedDepth === path.length
-    const repeatsContext = start === 0 && path.at(-1)?.key !== DIRECT_SERIES_BOOKS_KEY
-    const repeatsLast = start === 0 || returnsToAncestor
-    const firstHeading = repeatsContext ? 0 : repeatsLast && sharedDepth === path.length ? Math.max(0, sharedDepth - 1) : sharedDepth
+    const firstHeading = returnsToAncestor ? Math.max(0, sharedDepth - 1) : sharedDepth
 
     for (let depth = firstHeading; depth < path.length; depth++) {
       const group = path[depth]!
@@ -42,21 +52,28 @@ function layoutBlock(offset: number, count: number, block: SeriesGridBlock | und
         heading: { ...group, depth, continued: depth < sharedDepth },
       })
     }
-    const rowLimit = Math.min(start + columns, count)
+    const rowStart = start === 0 ? (previousRowStart ?? offset) : offset + start
+    const rowLimit = Math.min(rowStart + columns - offset, count)
     let end = start + 1
     while (end < rowLimit) {
       const next = block?.[end] ?? EMPTY_PATH
-      if (next.length !== path.length || commonPathLength(path, next) !== path.length) break
+      if (!samePath(path, next)) break
       end++
     }
-    rows.push({ id: `row:${offset + start}`, start: offset + start, end: offset + end, size })
+    rows.push({ id: `row:${rowStart}`, start: rowStart, end: offset + end, size })
     start = end
   }
   return rows
 }
 
 export function createSeriesGridLayout() {
-  const cache: { count: number; block: SeriesGridBlock | undefined; previousPath: SeriesGridPath; rows: SeriesGridRow[] }[] = []
+  const cache: {
+    count: number
+    block: SeriesGridBlock | undefined
+    previousPath: SeriesGridPath
+    previousRowStart: number | undefined
+    rows: SeriesGridRow[]
+  }[] = []
   let previousColumns = 0
   let previousSize = 0
 
@@ -75,11 +92,28 @@ export function createSeriesGridLayout() {
       const count = Math.min(total - offset, BOOK_WINDOW_BLOCK_SIZE)
       const block = blocks[index]
       const previousPath = (block ? blocks[index - 1]?.at(-1) : undefined) ?? EMPTY_PATH
+      const firstPath = block?.[0]
+      const lastRow = rows.at(-1)
+      const previousRowStart =
+        firstPath && lastRow?.end === offset && offset - lastRow.start < columns && samePath(previousPath, firstPath) ? lastRow.start : undefined
       let cached = cache[index]
-      if (!cached || cached.count !== count || cached.block !== block || cached.previousPath !== previousPath) {
-        cached = { count, block, previousPath, rows: layoutBlock(offset, count, block, previousPath, columns, size) }
+      if (
+        !cached ||
+        cached.count !== count ||
+        cached.block !== block ||
+        cached.previousPath !== previousPath ||
+        cached.previousRowStart !== previousRowStart
+      ) {
+        cached = {
+          count,
+          block,
+          previousPath,
+          previousRowStart,
+          rows: layoutBlock(offset, count, block, previousPath, previousRowStart, columns, size),
+        }
         cache[index] = cached
       }
+      if (previousRowStart !== undefined) rows.pop()
       rows.push(...cached.rows)
     }
     return rows

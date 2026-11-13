@@ -66,7 +66,7 @@ describe('Series Grid layout', () => {
     ])
   })
 
-  it('retains standalone headings and continuation when the previous page arrives', () => {
+  it('keeps the nested Standalone boundary and removes provisional ancestors when the child page arrives', () => {
     const layoutSeriesGrid = createSeriesGridLayout()
     const children = Array.from({ length: 100 }, () => [alpha, inner, story])
     const directBooks = Array.from({ length: 100 }, () => [alpha, inner, direct])
@@ -80,14 +80,15 @@ describe('Series Grid layout', () => {
       { ...inner, depth: 1, continued: false },
       { ...direct, depth: 2, continued: false },
     ])
-    expect(headings(before, 200)).toEqual([{ ...direct, depth: 2, continued: true }])
+    expect(headings(before, 200)).toEqual([])
 
     const after = layoutSeriesGrid(201, [children, directBooks, finalBooks], 3, 220)
     expect(headings(after, 100)).toEqual([{ ...direct, depth: 2, continued: false }])
-    expect(headings(after, 200)).toEqual([{ ...direct, depth: 2, continued: true }])
+    expect(headings(after, 200)).toEqual([])
+    expect(after[seriesGridRowIndex(after, 200)]).toMatchObject({ start: 199, end: 201 })
   })
 
-  it('marks a later page as continued once its predecessor has loaded', () => {
+  it('keeps only the new nested heading when an earlier page with shared ancestors arrives', () => {
     const layoutSeriesGrid = createSeriesGridLayout()
     const previousPage = Array.from({ length: 100 }, () => [alpha, inner])
     const currentPage = [
@@ -98,10 +99,46 @@ describe('Series Grid layout', () => {
     const after = layoutSeriesGrid(102, [previousPage, currentPage], 3, 220)
 
     expect(before.find((row) => row.id === 'heading:100:0')?.heading).toEqual({ ...alpha, depth: 0, continued: false })
-    expect(after.find((row) => row.id === 'heading:100:0')?.heading).toEqual({ ...alpha, depth: 0, continued: true })
-    expect(after.find((row) => row.id === 'heading:100:1')?.heading).toEqual({ ...inner, depth: 1, continued: true })
+    expect(after.find((row) => row.id === 'heading:100:0')).toBeUndefined()
+    expect(after.find((row) => row.id === 'heading:100:1')).toBeUndefined()
     expect(after.find((row) => row.id === 'heading:100:2')?.heading).toEqual({ ...story, depth: 2, continued: false })
     expect(after.find((row) => row.id === 'heading:101:1')?.heading).toEqual({ ...inner, depth: 1, continued: false })
+  })
+
+  it.each([
+    {
+      columns: 2,
+      ranges: [
+        [98, 100],
+        [100, 101],
+      ],
+    },
+    { columns: 3, ranges: [[98, 101]] },
+    { columns: 4, ranges: [[98, 101]] },
+  ])('renders a single group across the page boundary with $columns columns', ({ columns, ranges }) => {
+    const layoutSeriesGrid = createSeriesGridLayout()
+    const first = [...Array.from({ length: 98 }, () => [alpha]), [beta], [beta]]
+    const last = [[beta]]
+    const rows = layoutSeriesGrid(101, [first, last], columns, 220)
+    const groupRows = rows.filter((row) => row.start >= 98)
+
+    expect(groupRows.filter((row) => row.heading).map((row) => row.heading)).toEqual([{ ...beta, depth: 0, continued: false }])
+    expect(groupRows.filter((row) => !row.heading).map((row) => [row.start, row.end])).toEqual(ranges)
+    expect(rows[seriesGridRowIndex(rows, 100)]?.start).toBe(ranges.at(-1)?.[0])
+  })
+
+  it('packs rows across three pages without mutating a previous layout', () => {
+    const layoutSeriesGrid = createSeriesGridLayout()
+    const page = Array.from({ length: 100 }, () => [alpha])
+    const before = layoutSeriesGrid(201, [page, undefined, [[alpha]]], 3, 220)
+    const previousRow = before[seriesGridRowIndex(before, 99)]
+    const after = layoutSeriesGrid(201, [page, page, [[alpha]]], 3, 220)
+
+    expect(previousRow).toMatchObject({ id: 'row:99', start: 99, end: 100 })
+    expect(after[seriesGridRowIndex(after, 100)]).toMatchObject({ id: 'row:99', start: 99, end: 102 })
+    expect(after[seriesGridRowIndex(after, 200)]).toMatchObject({ id: 'row:198', start: 198, end: 201 })
+    expect(after.filter((row) => row.heading)).toHaveLength(1)
+    expect(after.filter((row) => !row.heading)).toHaveLength(67)
   })
 
   it('keeps placeholders for distant unloaded pages without generating group headings', () => {

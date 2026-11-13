@@ -4,9 +4,12 @@ import { mount } from '@vue/test-utils'
 import type { BookCard } from '@bookorbit/types'
 import { DIRECT_SERIES_BOOKS_KEY } from '../composables/useBookWindow'
 import { COVER_ASPECT_RATIO_KEY } from '../lib/cover-aspect-ratio'
+import type { SeriesGridRow } from '../lib/series-grid-layout'
 import VirtualBookGrid from './VirtualBookGrid.vue'
 
 const scrollToItemMock = vi.fn<(index: number, options?: { align?: string }) => void>()
+const scrollToPositionMock = vi.fn<(offset: number) => void>()
+const scrollerStart = ref(0)
 
 vi.mock('vue-virtual-scroller', () => ({
   RecycleScroller: {
@@ -16,6 +19,22 @@ vi.mock('vue-virtual-scroller', () => ({
     methods: {
       scrollToItem(index: number, options?: { align?: string }) {
         scrollToItemMock(index, options)
+      },
+      getScroll() {
+        return { start: scrollerStart.value }
+      },
+      findItemIndex(this: { items: SeriesGridRow[] }, offset: number) {
+        let remaining = offset
+        return this.items.findIndex((row) => {
+          remaining -= row.size
+          return remaining < 0
+        })
+      },
+      getItemOffset(this: { items: SeriesGridRow[] }, index: number) {
+        return this.items.slice(0, index).reduce((offset, row) => offset + row.size, 0)
+      },
+      scrollToPosition(offset: number) {
+        scrollToPositionMock(offset)
       },
     },
     template: '<div data-testid="recycle-scroller"><slot v-for="item in items" :key="item.id" :item="item" /></div>',
@@ -155,6 +174,45 @@ describe('VirtualBookGrid', () => {
     scroller.vm.$emit('update', rowIndex, rowIndex + 1, rowIndex, rowIndex)
 
     expect(wrapper.emitted('range')?.[0]).toEqual([199, rows[rowIndex]!.end - 1])
+  })
+
+  it('anchors the same book when a late preceding page joins its row and removes the provisional heading', async () => {
+    const previous = [{ key: 'series:1', label: 'Earlier series' }]
+    const poppyWar = [{ key: 'series:2', label: 'The Poppy War' }]
+    const firstPage = [...Array.from({ length: 98 }, () => previous), poppyWar, poppyWar]
+    const secondPage = [poppyWar]
+    const wrapper = mount(VirtualBookGrid, {
+      props: {
+        books: Array.from({ length: 101 }, (_, index) => makeBook(index + 1)),
+        coverSize: 250,
+        gridGap: 20,
+        seriesGridBlocks: [undefined, secondPage],
+      },
+    })
+    const scroller = wrapper.getComponent({ name: 'RecycleScroller' })
+    const initialRows = scroller.props('items') as SeriesGridRow[]
+    const initialRowIndex = initialRows.findIndex((row) => row.id === 'row:100')
+    const offsetInRow = 17
+    scrollerStart.value = initialRows.slice(0, initialRowIndex).reduce((offset, row) => offset + row.size, offsetInRow)
+    scrollToPositionMock.mockClear()
+
+    try {
+      await wrapper.setProps({ seriesGridBlocks: [firstPage, secondPage] })
+      await nextTick()
+
+      const rows = scroller.props('items') as SeriesGridRow[]
+      const mergedRowIndex = rows.findIndex((row) => row.id === 'row:98')
+      expect(rows[mergedRowIndex]).toMatchObject({ start: 98, end: 101 })
+      expect(initialRows[initialRowIndex]).toMatchObject({ start: 100, end: 101 })
+      expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual(['Earlier series', 'The Poppy War'])
+      expect(scrollToPositionMock).toHaveBeenCalledWith(rows.slice(0, mergedRowIndex).reduce((offset, row) => offset + row.size, offsetInRow))
+
+      scroller.vm.$emit('update', mergedRowIndex, mergedRowIndex + 1, mergedRowIndex, mergedRowIndex + 1)
+      expect(wrapper.emitted('range')?.at(-1)).toEqual([0, 100])
+    } finally {
+      scrollerStart.value = 0
+      wrapper.unmount()
+    }
   })
 
   it('uses the virtual scroller by default', () => {
