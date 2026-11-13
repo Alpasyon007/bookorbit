@@ -2,6 +2,28 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.5',
+    name: 'Custom revision 5: series selections and nested browsing',
+    date: '2026-11-13',
+    highlights: [
+      {
+        icon: 'BookPlus',
+        title: 'Choose which series books to request',
+        body: 'Eligible books start checked. Uncheck any volumes, or clear the selection and check just the books you want. Choices carry across preview pages. Request selected books uses your choices, and Request all still covers every eligible volume.',
+        media: [],
+      },
+      {
+        icon: 'LayoutGrid',
+        title: 'Browse nested series in the library',
+        body: 'Series Grid follows the order of each book’s saved series memberships, from the first series through each subseries. Each book appears once. Filters determine which books and headings appear, and your full sort orders both sibling groups and books within them.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.5',
+    changelogBody:
+      '### Custom changes\n\n- Select or exclude individual Hardcover series volumes across preview pages. Availability is checked again for the chosen format before each batch.\n- Show all saved series memberships as nested headings in library Series Grid. Filter matching books first, order sibling groups by their first matching book under the selected sort, and keep Standalone last.\n- In Series Grid, Series sorts by the ordered series names and Series index uses the innermost membership’s position.\n\nBased on upstream v3.8.0. These changes add no database migrations.',
+  },
+  {
     version: 'v3.8.0-custom.4',
     name: 'Custom revision 4: series search and browsing fixes',
     date: '2026-11-13',
