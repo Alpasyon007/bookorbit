@@ -142,6 +142,26 @@ describe('useAuth', () => {
     expect(setAccessTokenMock).toHaveBeenCalledWith(null)
     expect(routerPushMock).toHaveBeenCalledWith('/login')
   })
+
+  it('clears a pinned request language when the active account changes', async () => {
+    const { useAuth } = await import('../useAuth')
+    const { useRequestLanguageDefault } = await import('@/features/book-requests/composables/useRequestDestinationDefault')
+    const auth = useAuth()
+    const language = useRequestLanguageDefault()
+    apiMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: 7 }), { status: 200 }))
+    await auth.me()
+    apiMock.mockResolvedValueOnce(new Response(JSON.stringify({ settings: { defaultLanguage: 'fr' } }), { status: 200 }))
+    await language.load()
+    expect(language.resolveLanguage('en')).toBe('fr')
+
+    await auth.logout()
+    expect(language.defaultLanguage.value).toBeNull()
+    apiMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: 8 }), { status: 200 }))
+    await auth.me()
+    apiMock.mockResolvedValueOnce(new Response(JSON.stringify({ settings: { defaultLanguage: 'de' } }), { status: 200 }))
+    await language.load()
+    expect(language.resolveLanguage('en')).toBe('de')
+  })
   it('finishes local sign-out when the server is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new TypeError('network unavailable')))
     const { useAuth } = await import('../useAuth')

@@ -12,6 +12,16 @@ function response(body: unknown, ok = true): Pick<Response, 'json' | 'ok'> {
   }
 }
 
+function deferredResponse() {
+  let resolve!: (value: ReturnType<typeof response>) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<ReturnType<typeof response>>((complete, fail) => {
+    resolve = complete
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 async function freshComposable() {
   vi.resetModules()
   const { useRequestDestinationDefault } = await import('../composables/useRequestDestinationDefault')
@@ -26,6 +36,7 @@ async function freshBoth() {
     destination: module.useRequestDestinationDefault(),
     language: module.useRequestLanguageDefault(),
     requestLanguageOptions: module.requestLanguageOptions,
+    reset: module.resetRequestDefaults,
   }
 }
 
@@ -81,6 +92,26 @@ describe('useRequestDestinationDefault', () => {
     expect(apiMock).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores a stale destination response and keeps sharing the current session fetch', async () => {
+    const { destination, reset } = await freshBoth()
+    const stale = deferredResponse()
+    const current = deferredResponse()
+    apiMock.mockReturnValueOnce(stale.promise).mockReturnValueOnce(current.promise)
+
+    const oldLoad = destination.load()
+    reset()
+    const newLoad = destination.load()
+    stale.resolve(response({ ebook: { libraryId: 99, libraryName: 'Old destination', folderId: 1 } }))
+    await expect(oldLoad).resolves.toBe(false)
+    expect(destination.defaultFor('ebook').libraryId).toBeNull()
+
+    const sharedLoad = destination.load()
+    current.resolve(response({ ebook: { libraryId: 4, libraryName: 'Novels', folderId: 8 } }))
+    await expect(Promise.all([newLoad, sharedLoad])).resolves.toEqual([true, true])
+    expect(destination.defaultFor('ebook').libraryId).toBe(4)
+    expect(apiMock).toHaveBeenCalledTimes(2)
+  })
+
   /**
    * The instance default can name a library this user cannot browse, so it must never become the
    * value of a select they are expected to read and change. The form shows it as the placeholder
@@ -132,6 +163,21 @@ describe('useRequestLanguageDefault', () => {
     await language.load()
 
     expect(language.defaultLanguage.value).toBe('de')
+  })
+
+  it('discards an old language fetch that finishes after the new account loads', async () => {
+    const { language, reset } = await freshBoth()
+    const stale = deferredResponse()
+    apiMock.mockReturnValueOnce(stale.promise)
+    const oldLoad = language.load()
+    reset()
+
+    apiMock.mockResolvedValueOnce(response({ settings: { defaultLanguage: 'fr' } }))
+    await expect(language.load()).resolves.toBe(true)
+    stale.resolve(response({ settings: { defaultLanguage: 'de' } }))
+
+    await expect(oldLoad).resolves.toBe(false)
+    expect(language.resolveLanguage('en')).toBe('fr')
   })
 
   /** A row stored before this field existed must not read as a corrupt preference. */
@@ -213,6 +259,26 @@ describe('useRequestLanguageDefault', () => {
     await expect(language.setDefault('de')).resolves.toBe(false)
 
     expect(language.defaultLanguage.value).toBe('fr')
+  })
+
+  it('discards a late save failure from the previous account', async () => {
+    const { language, reset } = await freshBoth()
+    apiMock.mockResolvedValueOnce(response({ settings: { defaultLanguage: 'fr' } }))
+    await language.load()
+    const stale = deferredResponse()
+    apiMock.mockReturnValueOnce(stale.promise)
+    const oldSave = language.setDefault('de')
+    expect(language.isSaving.value).toBe(true)
+
+    reset()
+    expect(language.isSaving.value).toBe(false)
+    expect(language.defaultLanguage.value).toBeNull()
+    apiMock.mockResolvedValueOnce(response({ settings: { defaultLanguage: 'it' } }))
+    await language.load()
+    stale.reject(new Error('Network error'))
+
+    await expect(oldSave).resolves.toBe(false)
+    expect(language.defaultLanguage.value).toBe('it')
   })
 
   it('offers only languages a release can be matched against, named and sorted for the reader', async () => {

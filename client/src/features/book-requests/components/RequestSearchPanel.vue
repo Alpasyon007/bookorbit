@@ -63,7 +63,7 @@ import RequestPairCover from './RequestPairCover.vue'
 import { requestMediaIcon } from '../requestMedia'
 import { pairHalfState, pairSubmission, pairSubmissionLabelKey, type PairHalfState, type PairSubmission } from '../requestPair'
 
-const emit = defineEmits<{ submitted: [] }>()
+const emit = defineEmits<{ submitted: []; seriesSearch: [name: string] }>()
 
 const { t, locale } = useI18n()
 const {
@@ -407,6 +407,15 @@ const interruptedMessage = computed(() => {
   const names = interruptedProviders.value.map(({ provider }) => providerLabels.value.get(provider) ?? provider)
   return names.length ? t('bookRequests.search.sourcesUnavailable', { sources: names.join(', ') }) : null
 })
+
+function seriesNameFor(group: CandidateGroup): string | undefined {
+  return group.candidates.find((candidate) => candidate.seriesName)?.seriesName
+}
+
+function searchSeries(group: CandidateGroup) {
+  const name = seriesNameFor(group)
+  if (name) emit('seriesSearch', name)
+}
 
 function sourceNames(group: CandidateGroup): string {
   return group.providers.map((provider) => providerLabels.value.get(provider) ?? provider).join(', ')
@@ -1216,6 +1225,9 @@ function mediaIconFor(kind: BookRequestMediaKind) {
 
         <div class="min-w-0 flex-1 space-y-1">
           <p class="truncate text-[15px] font-semibold text-foreground">{{ group.title }}</p>
+          <button v-if="seriesNameFor(group)" type="button" class="text-xs text-primary underline" @click="searchSeries(group)">
+            {{ t('bookRequests.series.searchNamed', { name: seriesNameFor(group) }) }}
+          </button>
           <p v-if="group.authors.length" class="truncate text-sm text-muted-foreground">
             <template v-for="(name, index) in group.authors" :key="name">
               <span v-if="index > 0">, </span>

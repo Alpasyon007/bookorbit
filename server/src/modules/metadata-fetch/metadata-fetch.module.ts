@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SeriesCatalogService } from './series-catalog.service';
 
 import { MetadataCacheModule } from '../metadata-cache/metadata-cache.module';
 import { MetadataHttpProviderModule } from '../metadata-http-provider/metadata-http-provider.module';
@@ -54,6 +55,7 @@ const PROVIDER_CLASSES = [
       useFactory: (...providers: MetadataProvider[]) => providers,
       inject: PROVIDER_CLASSES,
     },
+    SeriesCatalogService,
     HardcoverClient,
     ComicVineClient,
     RanobeDbClient,
@@ -67,6 +69,6 @@ const PROVIDER_CLASSES = [
     BookProviderCacheRegistrar,
   ],
   controllers: [MetadataFetchController],
-  exports: [MetadataFetchService, MetadataFetchPipeline, ProviderRegistry, ProviderThrottleTracker, ProviderIdStore],
+  exports: [SeriesCatalogService, MetadataFetchService, MetadataFetchPipeline, ProviderRegistry, ProviderThrottleTracker, ProviderIdStore],
 })
 export class MetadataFetchModule {}

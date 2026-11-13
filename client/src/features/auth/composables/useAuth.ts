@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { AuthUser, AuthResponse } from '@bookorbit/types'
 import {
   api,
@@ -22,6 +22,7 @@ import { resetSmartScopes } from '@/features/smart-scope/composables/useSmartSco
 import { resetCollections } from '@/features/collection/composables/useCollections'
 import { resetBrowseCounts } from '@/composables/useBrowseCounts'
 import { resetBookRequestSummary } from '@/features/book-requests/composables/useBookRequestSummary'
+import { resetRequestDefaults } from '@/features/book-requests/composables/useRequestDestinationDefault'
 import { clearReleaseSearchCache } from '@/features/book-requests/composables/useReleasePicker'
 
 const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
@@ -30,6 +31,7 @@ const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 export type SessionOutcome = 'authenticated' | 'anonymous' | 'unreachable'
 
 const user = ref<AuthUser | null>(null)
+watch(() => user.value?.id, resetRequestDefaults, { flush: 'sync' })
 const isLoading = ref(false)
 let sessionRefreshTimer: number | null = null
 

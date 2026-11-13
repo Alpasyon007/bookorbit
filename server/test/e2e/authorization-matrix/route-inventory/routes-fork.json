@@ -11,5 +11,31 @@
     "allowDefault": false,
     "useGuards": [],
     "apiKey": "write"
+  },
+  {
+    "file": "server/src/modules/book-request/series-catalog.controller.ts",
+    "className": "SeriesCatalogController",
+    "methodName": "search",
+    "httpMethod": "GET",
+    "path": "/book-requests/series-catalog",
+    "permissions": ["Permission.BookRequestAccess"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
+  },
+  {
+    "file": "server/src/modules/book-request/series-catalog.controller.ts",
+    "className": "SeriesCatalogController",
+    "methodName": "members",
+    "httpMethod": "GET",
+    "path": "/book-requests/series-catalog/:id",
+    "permissions": ["Permission.BookRequestAccess"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
   }
 ]

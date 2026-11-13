@@ -14,6 +14,7 @@ import {
   type ResolvedRequestDestinations,
 } from '@bookorbit/types'
 import { api } from '@/lib/api'
+import { createCoalescedFetch, createRequestGeneration } from '@/lib/async'
 import { formatLanguageName } from '@/i18n/formatters'
 
 const PREFERENCES_ENDPOINT = '/api/v1/user-preferences/book-requests'
@@ -24,9 +25,8 @@ const defaultLanguage = ref<string | null>(DEFAULT_BOOK_REQUEST_PREFERENCES.defa
 const isSaving = ref(false)
 
 let hasLoadedDefaults = false
-let inFlightDefaults: Promise<boolean> | null = null
 let hasLoadedPreferences = false
-let inFlightPreferences: Promise<boolean> | null = null
+const sessionGeneration = createRequestGeneration()
 
 interface DestinationLibrary {
   id: number
@@ -65,34 +65,51 @@ function normalizeDestinations(value: Partial<ResolvedRequestDestinations> | und
   return next
 }
 
-async function fetchDefaults(): Promise<boolean> {
+const fetchDefaults = createCoalescedFetch(async (): Promise<boolean> => {
+  const generation = sessionGeneration.current()
   try {
     const response = await api(DEFAULTS_ENDPOINT)
     if (!response.ok) return false
 
-    destinations.value = normalizeDestinations((await response.json()) as Partial<ResolvedRequestDestinations>)
+    const body = (await response.json()) as Partial<ResolvedRequestDestinations>
+    if (!sessionGeneration.isCurrent(generation)) return false
+    destinations.value = normalizeDestinations(body)
     hasLoadedDefaults = true
     return true
   } catch {
     return false
   }
-}
+})
 
-async function fetchPreferences(): Promise<boolean> {
+const fetchPreferences = createCoalescedFetch(async (): Promise<boolean> => {
+  const generation = sessionGeneration.current()
   try {
     const response = await api(PREFERENCES_ENDPOINT)
     if (!response.ok) return false
 
     const body = (await response.json()) as { settings?: Partial<BookRequestPreferences> }
+    if (!sessionGeneration.isCurrent(generation)) return false
     defaultLanguage.value = normalizeLanguageCode(body.settings?.defaultLanguage)
     hasLoadedPreferences = true
     return true
   } catch {
     return false
   }
+})
+
+export function resetRequestDefaults(): void {
+  sessionGeneration.invalidate()
+  fetchDefaults.clear()
+  fetchPreferences.clear()
+  hasLoadedDefaults = false
+  hasLoadedPreferences = false
+  destinations.value = emptyResolvedRequestDestinations()
+  defaultLanguage.value = DEFAULT_BOOK_REQUEST_PREFERENCES.defaultLanguage
+  isSaving.value = false
 }
 
 async function persist(settings: BookRequestPreferences): Promise<boolean> {
+  const generation = sessionGeneration.current()
   const previous = current()
   defaultLanguage.value = settings.defaultLanguage
   isSaving.value = true
@@ -103,6 +120,7 @@ async function persist(settings: BookRequestPreferences): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ settings } satisfies { settings: BookRequestPreferences }),
     })
+    if (!sessionGeneration.isCurrent(generation)) return false
     if (!response.ok) {
       defaultLanguage.value = previous.defaultLanguage
       return false
@@ -110,10 +128,10 @@ async function persist(settings: BookRequestPreferences): Promise<boolean> {
     hasLoadedPreferences = true
     return true
   } catch {
-    defaultLanguage.value = previous.defaultLanguage
+    if (sessionGeneration.isCurrent(generation)) defaultLanguage.value = previous.defaultLanguage
     return false
   } finally {
-    isSaving.value = false
+    if (sessionGeneration.isCurrent(generation)) isSaving.value = false
   }
 }
 
@@ -129,10 +147,7 @@ async function persist(settings: BookRequestPreferences): Promise<boolean> {
 export function useRequestDestinationDefault() {
   async function load(): Promise<boolean> {
     if (hasLoadedDefaults) return true
-    inFlightDefaults ??= fetchDefaults().finally(() => {
-      inFlightDefaults = null
-    })
-    return inFlightDefaults
+    return fetchDefaults()
   }
 
   function defaultFor(mediaKind: BookRequestMediaKind): ResolvedRequestDestination {
@@ -170,10 +185,7 @@ export function useRequestDestinationDefault() {
 export function useRequestLanguageDefault() {
   async function load(): Promise<boolean> {
     if (hasLoadedPreferences) return true
-    inFlightPreferences ??= fetchPreferences().finally(() => {
-      inFlightPreferences = null
-    })
-    return inFlightPreferences
+    return fetchPreferences()
   }
 
   function setDefault(language: string | null): Promise<boolean> {

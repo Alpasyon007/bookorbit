@@ -20,6 +20,7 @@ import RequestEmptyState from './components/RequestEmptyState.vue'
 import RequestListSkeleton from './components/RequestListSkeleton.vue'
 import RequestListTable from './components/RequestListTable.vue'
 import RequestSearchPanel from './components/RequestSearchPanel.vue'
+import SeriesRequestPanel from './components/SeriesRequestPanel.vue'
 import { useBookRequestActions, useBookRequests, type ActionOutcome } from './composables/useBookRequests'
 import { useBookRequestProgress } from './composables/useBookRequestProgress'
 import { useBookRequestSummary } from './composables/useBookRequestSummary'
@@ -550,6 +551,13 @@ function handleFilterChange() {
   void activeList.value.applyFilters()
 }
 
+const seriesSeed = ref({ name: '', sequence: 0 })
+const seriesPanel = ref<InstanceType<typeof SeriesRequestPanel> | null>(null)
+function handleSeriesSearch(name: string) {
+  seriesSeed.value = { name, sequence: seriesSeed.value.sequence + 1 }
+  seriesPanel.value?.focusSearch()
+}
+
 function goToPreviousPage() {
   clearSelection()
   void activeList.value.goToPage(activeList.value.page.value - 1)
@@ -610,7 +618,8 @@ function goToNextPage() {
       is capped rather than centred, so switching tabs does not shift the content sideways.
     -->
     <section v-if="activeTab === 'search'" id="requests-panel-search" role="tabpanel" aria-labelledby="requests-tab-search" class="w-full max-w-5xl">
-      <RequestSearchPanel @submitted="handleSubmitted" />
+      <RequestSearchPanel @submitted="handleSubmitted" @series-search="handleSeriesSearch" />
+      <SeriesRequestPanel :key="user?.id ?? 'anonymous'" ref="seriesPanel" :seed="seriesSeed" :on-acknowledged="handleSubmitted" />
     </section>
 
     <section v-else :id="`requests-panel-${activeTab}`" role="tabpanel" :aria-labelledby="`requests-tab-${activeTab}`" class="space-y-4">

@@ -1,4 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { MetadataFetchModule } from '../metadata-fetch/metadata-fetch.module';
+import { SeriesCatalogController } from './series-catalog.controller';
 
 import { AppSettingsModule } from '../app-settings/app-settings.module';
 import { AuditModule } from '../audit/audit.module';
@@ -75,6 +77,7 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
  */
 @Module({
   imports: [
+    MetadataFetchModule,
     LibraryModule,
     AppSettingsModule,
     AuditModule,
@@ -85,6 +88,7 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
     forwardRef(() => NotificationModule),
   ],
   controllers: [
+    SeriesCatalogController,
     BookRequestController,
     BookRequestSelfFulfilController,
     BookRequestAdminController,

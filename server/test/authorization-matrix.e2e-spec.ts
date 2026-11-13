@@ -746,6 +746,15 @@ describe('Authorization matrix (e2e)', () => {
       assertNoFailures('interactive-only API key matrix', failures);
     }, 180_000);
 
+    it('requires book request access for both series catalog routes', async () => {
+      for (const url of ['/api/v1/book-requests/series-catalog?q=Dune', '/api/v1/book-requests/series-catalog/1']) {
+        const denied = await ctx.app.inject({ method: 'GET', url, headers: authHeader(personas.appSettingsAdmin.accessToken) });
+        expect(denied.statusCode).toBe(403);
+        const allowed = await ctx.app.inject({ method: 'GET', url, headers: authHeader(personas.allPermsUser.accessToken) });
+        expect(allowed.statusCode).not.toBe(403);
+      }
+    });
+
     it('allows a settings operator to read book-request source status without request access', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
