@@ -103,7 +103,7 @@ describe('VirtualBookGrid', () => {
       },
     })
 
-    expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual(['Crown of Ash', 'No Series'])
+    expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual(['Crown of Ash', 'Standalone'])
     await wrapper.get('[data-testid="book-card"]').trigger('click')
     expect(wrapper.emitted('action')?.[0]).toEqual([makeBook(1), 'quick-view'])
     await wrapper.get('[data-testid="book-card-select"]').trigger('click')

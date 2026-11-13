@@ -391,8 +391,8 @@ defineExpose({ scrollToIndex })
           <h2 class="w-full truncate border-b border-border pb-2 text-sm font-semibold text-foreground" :title="item.heading.label ?? undefined">
             {{
               item.heading.continued
-                ? t('views.bookView.seriesGrid.continued', { series: item.heading.label ?? t('views.bookView.seriesGrid.noSeries') })
-                : (item.heading.label ?? t('views.bookView.seriesGrid.noSeries'))
+                ? t('views.bookView.seriesGrid.continued', { series: item.heading.label ?? t('views.bookView.seriesGrid.standalone') })
+                : (item.heading.label ?? t('views.bookView.seriesGrid.standalone'))
             }}
           </h2>
         </div>

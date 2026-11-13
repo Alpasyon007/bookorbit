@@ -15093,7 +15093,7 @@
       "searchPlaceholder": "Search title, author, series, narrator...",
       "allBooksLoaded": "All {count} books loaded",
       "seriesGrid": {
-        "noSeries": "No Series",
+        "standalone": "Standalone",
         "continued": "{series} (continued)"
       }
     },
