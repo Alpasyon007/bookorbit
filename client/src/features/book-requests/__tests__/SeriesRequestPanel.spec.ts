@@ -72,7 +72,7 @@ describe('series requests', () => {
     state.api.mockImplementation((path, init) =>
       path.includes('?q=') ? Promise.resolve(json({ items: [], nextOffset: null })) : previous(path, init),
     )
-    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn() } })
+    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn<() => void>() } })
     const search = wrapper.get('#series-query')
 
     expect(wrapper.text()).not.toContain('No series found')
@@ -88,7 +88,7 @@ describe('series requests', () => {
     state.api.mockImplementation((path, init) =>
       path.includes('?q=') ? Promise.resolve(json({ items: [{ id: 1, name: 'Example' }], nextOffset: 25 })) : previous(path, init),
     )
-    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn() } })
+    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn<() => void>() } })
     const search = wrapper.get('#series-query')
     await search.setValue('Original title')
     await wrapper.get('form').trigger('submit')
