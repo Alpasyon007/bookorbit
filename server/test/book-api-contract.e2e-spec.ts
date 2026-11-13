@@ -107,11 +107,12 @@ describe('Series Grid book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }
       expect(pages.map((page) => page.total)).toEqual([3, 3, 3]);
       const cards = pages.flatMap((page) => page.items);
       expect(cards.map(({ id, seriesGroup }) => [id, seriesGroup])).toEqual([
-        [gamma, groupA],
         [alpha, groupA],
+        [gamma, groupA],
         [beta, groupB],
       ]);
-      expect(cards[1]!.seriesMemberships?.map(({ seriesId }) => seriesId)).toEqual([seriesA!.id, seriesB!.id]);
+      expect(cards.map((card) => card.seriesGroupHasChildren)).toEqual([false, true, false]);
+      expect(cards[0]!.seriesMemberships?.map(({ seriesId }) => seriesId)).toEqual([seriesA!.id, seriesB!.id]);
 
       const filtered = await list({
         ...query,
@@ -127,6 +128,7 @@ describe('Series Grid book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }
         const linked = await list({ ...query, collapseLinked: true });
         expect(linked.total).toBe(2);
         expect(linked.bookTotal).toBe(3);
+        expect(linked.items.every((card) => card.seriesGroupHasChildren === false)).toBe(true);
         expect(linked.items.map(({ id, seriesGroup }) => [id, seriesGroup])).toEqual([
           [gamma, groupA],
           [beta, groupB],
@@ -140,8 +142,8 @@ describe('Series Grid book API contract (e2e)', { timeout: SCENARIO_TIMEOUT_MS }
       const fallback = await list(query);
       expect(fallback.items.map(({ id, seriesGroup }) => [id, seriesGroup])).toEqual([
         [legacy, { key: 'legacy:legacy saga', label: 'legacy saga' }],
-        [gamma, groupA],
         [alpha, groupA],
+        [gamma, groupA],
         [beta, groupB],
         [ungrouped, { key: 'none', label: null }],
       ]);
@@ -243,6 +245,7 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       const cards = pages.flatMap((page) => page.items);
       expect(cards.map((card) => card.id)).toEqual([other, deep, child, parent, standalone]);
       expect(cards[1]!.seriesGroupPath).toEqual(series.slice(0, 4).map(({ id, name }) => ({ key: `series:${id}`, label: name })));
+      expect(cards.map((card) => card.seriesGroupHasChildren)).toEqual([false, false, true, true, false]);
       expect(cards[4]!.seriesGroupPath).toEqual([{ key: 'none', label: null }]);
       const filtered = await list({
         ...query,
@@ -251,6 +254,7 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       });
       expect(filtered.items.map((card) => card.id)).toEqual([child]);
       expect(filtered.items[0]!.seriesGroupPath).toHaveLength(2);
+      expect(filtered.items[0]!.seriesGroupHasChildren).toBe(false);
       const indexSort = await list({
         groupBySeries: true,
         sort: [
@@ -258,12 +262,12 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
           { field: 'title', dir: 'asc' },
         ],
       });
-      expect(indexSort.items.map((card) => card.id)).toEqual([child, deep, parent, other, standalone]);
+      expect(indexSort.items.map((card) => card.id)).toEqual([deep, child, parent, other, standalone]);
       const descending = await list({ groupBySeries: true, sort: [{ field: 'series', dir: 'desc' }] });
       expect(descending.items[0]!.id).not.toBe(other);
       expect(descending.items.at(-1)!.id).toBe(standalone);
       const sortedByTitle = await list({ groupBySeries: true, sort: [{ field: 'title', dir: 'asc' }] });
-      expect(sortedByTitle.items.map((card) => card.id)).toEqual([other, child, deep, parent, standalone]);
+      expect(sortedByTitle.items.map((card) => card.id)).toEqual([other, deep, child, parent, standalone]);
       const emptyPage = await list({ ...query, pagination: { page: 99, size: 1 } });
       expect(emptyPage.total).toBe(5);
       expect(emptyPage.items).toEqual([]);
@@ -272,6 +276,13 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       const shuffledAgain = await list(shuffledQuery);
       expect(shuffled.items.map((card) => card.id)).toEqual(shuffledAgain.items.map((card) => card.id));
       expect(shuffled.items.at(-1)!.id).toBe(standalone);
+      const secondChild = await seed('Echo nested', [0, 4], '1', 2000);
+      const secondParent = await seed('Foxtrot nested', [0], null, 2000);
+      const siblings = await list({ groupBySeries: true, sort: [{ field: 'title', dir: 'desc' }] });
+      expect(siblings.items.map((card) => card.id)).toEqual([secondChild, deep, child, secondParent, parent, other, standalone]);
+      expect(siblings.items.filter((card) => card.id === parent || card.id === secondParent).every((card) => card.seriesGroupHasChildren)).toBe(true);
+      const parentOnly = await list({ groupBySeries: true, q: 'Charlie nested' });
+      expect(parentOnly.items.map((card) => [card.id, card.seriesGroupHasChildren])).toEqual([[parent, false]]);
     } finally {
       await ctx.db.delete(libraries).where(eq(libraries.id, library.libraryId));
       await ctx.db.delete(bookSeries).where(

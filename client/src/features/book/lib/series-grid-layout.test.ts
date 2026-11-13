@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DIRECT_SERIES_BOOKS_KEY } from '../composables/useBookWindow'
 import { createSeriesGridLayout, seriesGridRowIndex } from './series-grid-layout'
 
 const alpha = { key: 'series:1', label: 'Shared Title' }
@@ -6,6 +7,7 @@ const beta = { key: 'series:2', label: 'Shared Title' }
 const none = { key: 'none', label: null }
 const inner = { key: 'series:3', label: 'Inner' }
 const story = { key: 'series:4', label: 'Story' }
+const direct = { key: DIRECT_SERIES_BOOKS_KEY, label: null }
 
 describe('Series Grid layout', () => {
   it('uses full-width headings and splits rows by series identity', () => {
@@ -47,6 +49,42 @@ describe('Series Grid layout', () => {
       [5, 6],
     ])
     expect(rows[seriesGridRowIndex(rows, 4)]).toMatchObject({ start: 3, end: 5 })
+  })
+
+  it('shows subordinate Standalone buckets after child groups at every parent depth', () => {
+    const layoutSeriesGrid = createSeriesGridLayout()
+    const rows = layoutSeriesGrid(5, [[[alpha, inner, story], [alpha, inner, direct], [alpha, direct], [beta], [none]]], 4, 220)
+
+    expect(rows.filter((row) => row.heading).map(({ start, heading }) => [start, heading!.key, heading!.depth, heading!.continued])).toEqual([
+      [0, alpha.key, 0, false],
+      [0, inner.key, 1, false],
+      [0, story.key, 2, false],
+      [1, direct.key, 2, false],
+      [2, direct.key, 1, false],
+      [3, beta.key, 0, false],
+      [4, none.key, 0, false],
+    ])
+  })
+
+  it('retains standalone headings and continuation when the previous page arrives', () => {
+    const layoutSeriesGrid = createSeriesGridLayout()
+    const children = Array.from({ length: 100 }, () => [alpha, inner, story])
+    const directBooks = Array.from({ length: 100 }, () => [alpha, inner, direct])
+    const finalBooks = [[alpha, inner, direct]]
+    const headings = (rows: ReturnType<typeof layoutSeriesGrid>, at: number) =>
+      rows.filter((row) => row.start === at && row.heading).map((row) => row.heading)
+
+    const before = layoutSeriesGrid(201, [undefined, directBooks, finalBooks], 3, 220)
+    expect(headings(before, 100)).toEqual([
+      { ...alpha, depth: 0, continued: false },
+      { ...inner, depth: 1, continued: false },
+      { ...direct, depth: 2, continued: false },
+    ])
+    expect(headings(before, 200)).toEqual([{ ...direct, depth: 2, continued: true }])
+
+    const after = layoutSeriesGrid(201, [children, directBooks, finalBooks], 3, 220)
+    expect(headings(after, 100)).toEqual([{ ...direct, depth: 2, continued: false }])
+    expect(headings(after, 200)).toEqual([{ ...direct, depth: 2, continued: true }])
   })
 
   it('marks a later page as continued once its predecessor has loaded', () => {

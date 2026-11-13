@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import type { BookCard } from '@bookorbit/types'
+import { DIRECT_SERIES_BOOKS_KEY } from '../composables/useBookWindow'
 import { COVER_ASPECT_RATIO_KEY } from '../lib/cover-aspect-ratio'
 import VirtualBookGrid from './VirtualBookGrid.vue'
 
@@ -119,6 +120,30 @@ describe('VirtualBookGrid', () => {
     expect(wrapper.findAll('h2, h3, h4, h5, h6, [role="heading"]').map((heading) => heading.text())).toEqual(path.map((series) => series.label))
     expect(wrapper.get('[role="heading"]').attributes('aria-level')).toBe('7')
     expect(wrapper.findAll('[data-testid="book-card"]')).toHaveLength(1)
+  })
+
+  it('renders direct parent books under a subordinate Standalone heading after the child page', () => {
+    const parent = { key: 'series:1', label: 'Parent' }
+    const child = { key: 'series:2', label: 'Child' }
+    const direct = { key: DIRECT_SERIES_BOOKS_KEY, label: null }
+    const standalone = { key: 'none', label: null }
+    const children = Array.from({ length: 100 }, () => [parent, child])
+    const wrapper = mount(VirtualBookGrid, {
+      props: {
+        books: Array.from({ length: 102 }, (_, index) => makeBook(index + 1)),
+        coverSize: 120,
+        gridGap: 12,
+        seriesGridBlocks: [children, [[parent, direct], [standalone]]],
+      },
+    })
+
+    expect(wrapper.findAll('h2, h3').map((heading) => [heading.element.tagName, heading.text()])).toEqual([
+      ['H2', 'Parent'],
+      ['H3', 'Child'],
+      ['H3', 'Standalone'],
+      ['H2', 'Standalone'],
+    ])
+    expect(wrapper.findAll('[data-testid="book-card"]')).toHaveLength(102)
   })
 
   it('asks for the immediately preceding server page at a distant grouped range', () => {

@@ -39,24 +39,22 @@ export function buildSeriesGridPageSql(link: { prefixCte: SQL; where: SQL; addFo
         WHERE ${link.where}
       ),
       expanded AS MATERIALIZED (
-        SELECT ranked.id, ranked.rank, ranked.keys[1:member.depth::integer] AS prefix, member.depth
+        SELECT ranked.id, ranked.rank, ranked.keys[1:member.depth::integer] AS prefix, member.depth,
+          member.depth = cardinality(ranked.keys) AS is_terminal
         FROM ranked CROSS JOIN LATERAL unnest(ranked.keys) WITH ORDINALITY AS member(key, depth)
       ),
       prefixes AS MATERIALIZED (
-        SELECT prefix, min(rank) AS first_rank FROM expanded GROUP BY prefix
+        SELECT prefix, min(rank) AS first_rank, bool_or(NOT is_terminal) AS has_children FROM expanded GROUP BY prefix
       ),
       rank_paths AS (
-        SELECT expanded.id, array_agg(prefixes.first_rank ORDER BY expanded.depth) AS ranks
+        SELECT expanded.id, array_agg(prefixes.first_rank ORDER BY expanded.depth) AS ranks,
+          bool_or(prefixes.has_children) FILTER (WHERE expanded.is_terminal) AS has_children
         FROM expanded JOIN prefixes ON prefixes.prefix = expanded.prefix
         GROUP BY expanded.id
       ),
-      terminals AS MATERIALIZED (
-        SELECT keys, min(rank) AS first_rank FROM ranked GROUP BY keys
-      ),
       ordered AS (
-        SELECT ranked.*, rank_paths.ranks || terminals.first_rank AS rank_path
-        FROM ranked JOIN terminals ON terminals.keys = ranked.keys
-        JOIN rank_paths ON rank_paths.id = ranked.id
+        SELECT ranked.*, rank_paths.ranks || 9223372036854775807::bigint AS rank_path, rank_paths.has_children
+        FROM ranked JOIN rank_paths ON rank_paths.id = ranked.id
       ),
       totals AS (
         SELECT count(*) AS total, count(*) ${link.addFolded} AS book_total FROM ranked
@@ -66,7 +64,7 @@ export function buildSeriesGridPageSql(link: { prefixCte: SQL; where: SQL; addFo
         ORDER BY (keys[1] = 'none'), rank_path, rank
         LIMIT ${limit} OFFSET ${offset}
       )
-      SELECT paged.id, totals.total, totals.book_total,
+      SELECT paged.id, paged.has_children, totals.total, totals.book_total,
         (SELECT jsonb_agg(jsonb_build_object('key', paged.keys[i], 'label', paged.labels[i]) ORDER BY i)
          FROM generate_subscripts(paged.keys, 1) i) AS path
       FROM totals LEFT JOIN paged ON true

@@ -22,7 +22,7 @@ vi.mock('../useBookEvents', () => ({
   }),
 }))
 
-import { BOOK_WINDOW_BLOCK_SIZE } from '../useBookWindow'
+import { BOOK_WINDOW_BLOCK_SIZE, DIRECT_SERIES_BOOKS_KEY } from '../useBookWindow'
 import { useBookViewWindow } from '../useBookViewWindow'
 import { useEffectiveSeriesCollapse } from '../useEffectiveSeriesCollapse'
 
@@ -249,6 +249,38 @@ describe('useBookViewWindow', () => {
 
     expect(win.loadedCards.value.map((book) => book.id)).toEqual([2])
     expect(win.seriesGridBlocks.value).toEqual([[currentPath]])
+  })
+
+  it('uses the server child flag for direct books and clears the Standalone bucket when a filter removes all children', async () => {
+    const parent = { key: 'series:1', label: 'Parent' }
+    const leaf = { key: 'series:2', label: 'Leaf' }
+    const standalone = { key: 'none', label: null }
+    const direct = { key: DIRECT_SERIES_BOOKS_KEY, label: null }
+    const parentBook = { ...makeBook(1), seriesGroupPath: [parent] }
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...pageFor(0, 3),
+        items: [
+          { ...parentBook, seriesGroupHasChildren: true },
+          { ...makeBook(2), seriesGroupPath: [leaf], seriesGroupHasChildren: false },
+          { ...makeBook(3), seriesGroupPath: [standalone], seriesGroupHasChildren: false },
+        ],
+      }),
+    })
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ...pageFor(0, 1), items: [{ ...parentBook, seriesGroupHasChildren: false }] }),
+    })
+
+    const { win } = setup({ viewMode: 'series-grid' })
+    await flush()
+    expect(win.seriesGridBlocks.value).toEqual([[[parent, direct], [leaf], [standalone]]])
+    expect(win.loadedCards.value[0]?.seriesGroupPath).toEqual([parent])
+
+    win.filter.value = { type: 'group', join: 'AND', rules: [{ type: 'rule', field: 'title', operator: 'eq', value: 'Book 1' }] }
+    await flush()
+    expect(win.seriesGridBlocks.value).toEqual([[[parent]]])
   })
 
   it('sends the supplied default sort and hides the rail for collection order', async () => {

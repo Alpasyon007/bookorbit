@@ -208,6 +208,8 @@ export type BookCard = {
   seriesGroup?: { key: string; label: string | null };
   /** Ordered memberships from the outer group through the innermost group. */
   seriesGroupPath?: { key: string; label: string | null }[];
+  /** Whether the card's complete path has child groups in the filtered result. */
+  seriesGroupHasChildren?: boolean;
   files: BookFileRef[];
   publishedDate: string | null;
   publishedYear: number | null;

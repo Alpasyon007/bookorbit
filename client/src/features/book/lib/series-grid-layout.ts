@@ -1,4 +1,4 @@
-import { BOOK_WINDOW_BLOCK_SIZE, type SeriesGridBlock, type SeriesGridPath } from '../composables/useBookWindow'
+import { BOOK_WINDOW_BLOCK_SIZE, DIRECT_SERIES_BOOKS_KEY, type SeriesGridBlock, type SeriesGridPath } from '../composables/useBookWindow'
 
 type SeriesGridHeading = SeriesGridPath[number] & { depth: number; continued: boolean }
 
@@ -28,7 +28,9 @@ function layoutBlock(offset: number, count: number, block: SeriesGridBlock | und
     const before = start === 0 ? previousPath : (block?.[start - 1] ?? EMPTY_PATH)
     const sharedDepth = commonPathLength(before, path)
     const returnsToAncestor = path.length < before.length && sharedDepth === path.length
-    const firstHeading = start === 0 ? 0 : returnsToAncestor ? Math.max(0, sharedDepth - 1) : sharedDepth
+    const repeatsContext = start === 0 && path.at(-1)?.key !== DIRECT_SERIES_BOOKS_KEY
+    const repeatsLast = start === 0 || returnsToAncestor
+    const firstHeading = repeatsContext ? 0 : repeatsLast && sharedDepth === path.length ? Math.max(0, sharedDepth - 1) : sharedDepth
 
     for (let depth = firstHeading; depth < path.length; depth++) {
       const group = path[depth]!

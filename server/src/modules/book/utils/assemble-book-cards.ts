@@ -27,6 +27,7 @@ type BookRow = {
   seriesGroupKey?: string | null;
   seriesGroupLabel?: string | null;
   seriesGroupPath?: BookCard['seriesGroupPath'];
+  seriesGroupHasChildren?: boolean;
   publishedDate: string | null;
   publishedYear: number | null;
   language: string | null;
@@ -221,7 +222,11 @@ export function assembleBookCards(
       seriesName: row.seriesName ?? null,
       seriesIndex: row.seriesIndex ?? null,
       ...(row.seriesGroupKey
-        ? { seriesGroup: { key: row.seriesGroupKey, label: row.seriesGroupLabel ?? null }, seriesGroupPath: row.seriesGroupPath }
+        ? {
+            seriesGroup: { key: row.seriesGroupKey, label: row.seriesGroupLabel ?? null },
+            seriesGroupPath: row.seriesGroupPath,
+            seriesGroupHasChildren: row.seriesGroupHasChildren,
+          }
         : {}),
       seriesMemberships: (seriesMembershipsByBook.get(row.id) ?? [])
         .slice()

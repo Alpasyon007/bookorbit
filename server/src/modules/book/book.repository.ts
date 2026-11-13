@@ -638,6 +638,7 @@ export class BookRepository {
     const result = await this.db.execute<{
       id: number | null;
       path: BookCard['seriesGroupPath'] | null;
+      has_children: boolean | null;
       total: string;
       book_total: string;
     }>(buildSeriesGridPageSql(link, opts.orderBy, opts.limit, opts.offset));
@@ -654,6 +655,7 @@ export class BookRepository {
           seriesGroupKey: entry.path?.[0]?.key ?? 'none',
           seriesGroupLabel: entry.path?.[0]?.label ?? null,
           seriesGroupPath: entry.path ?? [{ key: 'none', label: null }],
+          seriesGroupHasChildren: entry.has_children === true,
         },
       ];
     });

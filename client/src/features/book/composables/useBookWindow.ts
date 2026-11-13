@@ -3,6 +3,7 @@ import { api } from '@/lib/api'
 import type { BookCard, BookQuery, BooksPage } from '@bookorbit/types'
 
 export const BOOK_WINDOW_BLOCK_SIZE = 100
+export const DIRECT_SERIES_BOOKS_KEY = 'series:direct'
 const FAILED_BLOCK_RETRY_MS = 2000
 const MAX_ITEMS_PER_ENSURE = 1000
 
@@ -12,6 +13,14 @@ export type BookPlaceholder = { id: number; placeholder: true }
 export type BookSlot = BookCard | BookPlaceholder
 export type SeriesGridPath = Readonly<NonNullable<BookCard['seriesGroupPath']>>
 export type SeriesGridBlock = readonly (SeriesGridPath | undefined)[]
+
+const directSeriesBooksGroup = { key: DIRECT_SERIES_BOOKS_KEY, label: null }
+
+function resolveSeriesGridPath(card: BookCard): SeriesGridPath | undefined {
+  const path = card.seriesGroupPath?.length ? card.seriesGroupPath : card.seriesGroup ? [card.seriesGroup] : undefined
+  if (card.seriesGroupHasChildren && path?.[0]?.label != null) return [...path, directSeriesBooksGroup]
+  return path
+}
 
 export function isBookPlaceholder(slot: BookSlot): slot is BookPlaceholder {
   return (slot as BookPlaceholder).placeholder === true
@@ -137,10 +146,7 @@ export function useBookWindow(options: { endpoint: Ref<string | null>; query: Re
       const next = resizeSlots(swapPending ? [] : slots.value, data.total)
       if (body.groupBySeries) {
         const nextBlocks = swapPending ? [] : seriesGridBlocks.value.slice(0, Math.ceil(data.total / BOOK_WINDOW_BLOCK_SIZE))
-        nextBlocks[block] = data.items.map((card) => {
-          if (card.seriesGroupPath?.length) return card.seriesGroupPath
-          return card.seriesGroup ? [card.seriesGroup] : undefined
-        })
+        nextBlocks[block] = data.items.map(resolveSeriesGridPath)
         seriesGridBlocks.value = nextBlocks
       } else if (seriesGridBlocks.value.length > 0) {
         seriesGridBlocks.value = []
