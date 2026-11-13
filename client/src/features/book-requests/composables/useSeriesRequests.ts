@@ -326,6 +326,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
         const status = availability[i]!
         if (status.ownedBookId !== null || status.alreadySubscribed) {
           skipped++
+          selection.removeSelected(book.id)
           continue
         }
         const result = await read<BookRequestSubmitResult>('/api/v1/book-requests', {
@@ -345,6 +346,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
         if (disposed) return
         if (result.subscribed) joined++
         else created++
+        selection.removeSelected(book.id)
         updateProgress()
       }
     }

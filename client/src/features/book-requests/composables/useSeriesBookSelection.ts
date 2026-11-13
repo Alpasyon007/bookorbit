@@ -38,9 +38,15 @@ export function useSeriesBookSelection() {
       selected.value = next
     }
   }
+  function removeSelected(id: string) {
+    if (mode.value !== 'explicit' || !selected.value.has(id)) return
+    const next = new Map(selected.value)
+    next.delete(id)
+    selected.value = next
+  }
   function snapshot() {
     return { mode: mode.value, excluded: new Set(excluded.value), selected: [...selected.value.values()] }
   }
 
-  return { selectionSummary, hasSelectedBooks, reset, clear, isSelected, toggle, snapshot }
+  return { selectionSummary, hasSelectedBooks, reset, clear, isSelected, toggle, removeSelected, snapshot }
 }

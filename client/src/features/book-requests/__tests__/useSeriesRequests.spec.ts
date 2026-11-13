@@ -94,9 +94,10 @@ describe('useSeriesRequests', () => {
     expect(model.bookEligibilityReason(model.books.value[0]!, 0)).toBe('owned')
     await model.requestSelected()
     expect(posts()).toHaveLength(0)
-    expect(model.selectionSummary.value.count).toBe(1)
+    expect(model.selectionSummary.value.count).toBe(0)
     owned.clear()
     await flushPromises()
+    model.toggleBook(model.books.value[0]!, 0)
     await model.requestSelected()
     expect(posts()).toHaveLength(1)
     expect(posts()[0]!.mediaKind).toBe('audiobook')
@@ -115,6 +116,42 @@ describe('useSeriesRequests', () => {
     expect(posts()).toHaveLength(0)
     expect(model.error.value).toBeTruthy()
     expect(model.selectionSummary.value.count).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('ignores an old page response after a format change', async () => {
+    const { model, wrapper } = await setupSeries(30)
+    const original = state.api.getMockImplementation()!
+    let release!: () => void
+    const deferred = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    state.api.mockImplementation(async (path, init) => {
+      if (path.includes('series-catalog/') && path.includes('offset=25')) await deferred
+      return original(path, init)
+    })
+    model.nextPage()
+    model.mediaKind.value = 'audiobook'
+    await flushPromises()
+    expect(model.pageOffset.value).toBe(0)
+    release()
+    await flushPromises()
+    expect(model.pageOffset.value).toBe(0)
+    expect(model.books.value[0]!.id).toBe('work-0')
+    wrapper.unmount()
+  })
+
+  it('submits duplicate IDs only once and excludes unknown or future dates', async () => {
+    const { model, wrapper, posts, rows } = await setupSeries(4)
+    rows[1] = { ...rows[0]! }
+    rows[2]!.releaseDate = ''
+    rows[3]!.releaseDate = '2999-01-01'
+    model.selectSeries({ id: 2, name: 'Other', author: null })
+    await flushPromises()
+    expect(model.bookEligibilityReason(model.books.value[2]!, 2)).toBe('unknown-date')
+    expect(model.bookEligibilityReason(model.books.value[3]!, 3)).toBe('upcoming')
+    await model.requestSelected()
+    expect(posts().map((book) => book.providerId)).toEqual(['work-0'])
     wrapper.unmount()
   })
 
@@ -175,8 +212,10 @@ describe('useSeriesRequests', () => {
     release()
     await run
     expect(posts()).toHaveLength(1)
+    expect(model.selectionSummary.value.count).toBe(1)
     await flushPromises()
     await model.requestSelected()
+    expect(model.selectionSummary.value.count).toBe(0)
     expect(posts()).toHaveLength(2)
     wrapper.unmount()
   })
@@ -228,5 +267,5 @@ async function setupSeries(count: number) {
   await flushPromises()
   model.selectSeries({ id: 1, name: 'Series', author: null })
   await flushPromises()
-  return { model, wrapper, posts: () => submitted, owned }
+  return { model, wrapper, posts: () => submitted, owned, rows }
 }
