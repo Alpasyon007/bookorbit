@@ -31,12 +31,17 @@ export class ITunesCoverProvider implements CoverProvider {
     if (!query) return [];
     const entity = params.isAudiobook ? 'audiobook' : 'ebook';
 
-    const primary = await this.searchOnce(query, entity, coverResolution);
-    if (primary.length > 0 || !params.author?.trim()) return primary;
-    return this.searchOnce(params.title.trim(), entity, coverResolution);
+    const primary = await this.searchOnce(query, entity, coverResolution, params.signal);
+    if (primary.length > 0 || !params.author?.trim() || params.signal?.aborted) return primary;
+    return this.searchOnce(params.title.trim(), entity, coverResolution, params.signal);
   }
 
-  private async searchOnce(query: string, entity: 'ebook' | 'audiobook', coverResolution: ITunesCoverResolution): Promise<CoverSearchResult[]> {
+  private async searchOnce(
+    query: string,
+    entity: 'ebook' | 'audiobook',
+    coverResolution: ITunesCoverResolution,
+    signal?: AbortSignal,
+  ): Promise<CoverSearchResult[]> {
     const url = new URL(ITunesCoverProvider.SEARCH_URL);
     url.searchParams.set('term', query);
     url.searchParams.set('entity', entity);
@@ -46,7 +51,8 @@ export class ITunesCoverProvider implements CoverProvider {
     const previewSize = 300;
 
     try {
-      const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10_000) });
+      const timeout = AbortSignal.timeout(10_000);
+      const response = await fetch(url.toString(), { signal: signal ? AbortSignal.any([timeout, signal]) : timeout });
       if (!response.ok) {
         this.logger.warn(`Search failed with status ${response.status} for query "${sanitizeLogValue(query)}"`);
         return [];

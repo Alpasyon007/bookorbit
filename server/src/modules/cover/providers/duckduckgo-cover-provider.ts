@@ -1,7 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CoverSearchResult } from '@bookorbit/types';
+import { readBoundedText } from '../../../common/utils/bounded-response';
+import { sanitizeLogValue } from '../../../common/utils/log-sanitize.utils';
 import { COVER_PROXY_USER_AGENT } from '../constants';
 import { CoverProvider, CoverSearchParams, DUCKDUCKGO_PROVIDER_KEY } from './cover-provider';
+import { indexedCoverDomain, indexedCoverResult, type IndexedCoverSource } from './indexed-cover-sources';
+
+const SEARCH_TIMEOUT_MS = 8_000;
+const MAX_SEARCH_BYTES = 2 * 1024 * 1024;
+const INDEXED_RESULT_LIMIT = 12;
+
+interface DuckDuckGoImage {
+  image: string;
+  thumbnail: string;
+  url?: string;
+  width: number;
+  height: number;
+}
+
+type ImageSearch = { images: DuckDuckGoImage[]; failed: boolean };
 
 @Injectable()
 export class DuckDuckGoCoverProvider implements CoverProvider {
@@ -14,18 +31,19 @@ export class DuckDuckGoCoverProvider implements CoverProvider {
   private static readonly SEARCH_PARAMS_SQUARE = '&iar=images&iaf=size%3ALarge%2Clayout%3ASquare';
 
   async search(params: CoverSearchParams): Promise<CoverSearchResult[]> {
-    const { title, author, isAudiobook } = params;
+    const { title, author, isAudiobook, signal } = params;
     const bookType = isAudiobook ? 'audiobook' : 'book';
     const searchTerm = author ? `${title} ${author} ${bookType}` : `${title} ${bookType}`;
 
     const searchParams = isAudiobook ? DuckDuckGoCoverProvider.SEARCH_PARAMS_SQUARE : DuckDuckGoCoverProvider.SEARCH_PARAMS_TALL;
+    const search = (query: string) => (signal ? this.performSearch(query, searchParams, signal) : this.performSearch(query, searchParams));
 
     try {
       // 1. Specific search (Amazon/Goodreads)
-      const siteFilteredResults = await this.performSearch(`${searchTerm} (site:amazon.com OR site:goodreads.com)`, searchParams);
+      const siteFilteredResults = await search(`${searchTerm} (site:amazon.com OR site:goodreads.com)`);
 
       // 2. General search
-      const generalResults = await this.performSearch(searchTerm, searchParams);
+      const generalResults = signal?.aborted ? [] : await search(searchTerm);
 
       // Filter and merge
       const filteredSiteResults = this.filterResults(siteFilteredResults, isAudiobook).slice(0, 10);
@@ -43,8 +61,8 @@ export class DuckDuckGoCoverProvider implements CoverProvider {
       }
 
       // Fallback: If few results, try broader search (title only)
-      if (combined.length < 5 && author) {
-        const fallbackResults = await this.performSearch(`${title} ${bookType}`, searchParams);
+      if (combined.length < 5 && author && !signal?.aborted) {
+        const fallbackResults = await search(`${title} ${bookType}`);
         const filteredFallback = this.filterResults(fallbackResults, isAudiobook);
         for (const res of filteredFallback) {
           if (!seenUrls.has(res.sourceUrl)) {
@@ -64,10 +82,57 @@ export class DuckDuckGoCoverProvider implements CoverProvider {
     }
   }
 
-  private async performSearch(query: string, searchParams: string): Promise<CoverSearchResult[]> {
+  async searchIndexedSite(source: IndexedCoverSource, params: CoverSearchParams): Promise<{ results: CoverSearchResult[]; failed: boolean }> {
+    const startedAt = Date.now();
+    this.logger.debug(`[cover.indexed_search] [start] provider=${source} - indexed cover search started`);
+    try {
+      const results = await this.findIndexedSiteCovers(source, params);
+      this.logger.debug(
+        `[cover.indexed_search] [end] provider=${source} durationMs=${Date.now() - startedAt} resultCount=${results.length} - indexed cover search completed`,
+      );
+      return { results, failed: false };
+    } catch (error) {
+      const errorClass = error instanceof Error ? error.name : 'UnknownError';
+      this.logger.warn(
+        `[cover.indexed_search] [fail] provider=${source} durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${sanitizeLogValue(error instanceof Error ? error.message : String(error))}" - indexed cover search failed`,
+      );
+      return { results: [], failed: true };
+    }
+  }
+
+  private async findIndexedSiteCovers(source: IndexedCoverSource, params: CoverSearchParams): Promise<CoverSearchResult[]> {
+    const terms = [params.title, params.author, 'book cover'].filter(Boolean).join(' ');
+    const { images, failed } = await this.requestImages(`${terms} site:${indexedCoverDomain(source)}`, '&iar=images&kl=uk-en', params.signal);
+    if (failed) return Promise.reject(new Error('DuckDuckGo image index did not return usable results'));
+    const results = new Map<string, CoverSearchResult>();
+    for (const { url, image, thumbnail, width, height } of images) {
+      const result = indexedCoverResult(source, { page: url, image, thumbnail, width, height });
+      if (!result || results.has(result.sourceUrl)) continue;
+      results.set(result.sourceUrl, result);
+      if (results.size >= INDEXED_RESULT_LIMIT) break;
+    }
+    return [...results.values()];
+  }
+
+  private async performSearch(query: string, searchParams: string, signal?: AbortSignal): Promise<CoverSearchResult[]> {
+    const { images } = await this.requestImages(query, searchParams, signal);
+    return images.map((r) => ({
+      previewUrl: r.thumbnail,
+      sourceUrl: r.image,
+      width: r.width,
+      height: r.height,
+      source: this.determineSource(r.image),
+      url: r.image,
+    }));
+  }
+
+  private async requestImages(query: string, searchParams: string, parentSignal?: AbortSignal): Promise<ImageSearch> {
     const searchUrl = `${DuckDuckGoCoverProvider.SEARCH_BASE_URL}${encodeURIComponent(query)}${searchParams}`;
+    const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
+    const signal = parentSignal ? AbortSignal.any([timeout, parentSignal]) : timeout;
 
     const response = await fetch(searchUrl, {
+      signal,
       headers: {
         'User-Agent': COVER_PROXY_USER_AGENT,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -77,19 +142,20 @@ export class DuckDuckGoCoverProvider implements CoverProvider {
 
     if (!response.ok) {
       this.logger.warn(`Search page fetch failed: ${response.status}`);
-      return [];
+      return { images: [], failed: true };
     }
 
-    const html = await response.text();
-    const vqdMatch = html.match(/vqd="(\d+-\d+)"/);
+    const html = await readBoundedText(response, MAX_SEARCH_BYTES);
+    const vqdMatch = html.match(/vqd="([\d-]+)"/);
     if (!vqdMatch) {
       this.logger.warn('Could not find vqd token');
-      return [];
+      return { images: [], failed: true };
     }
     const vqd = vqdMatch[1];
 
     const apiUrl = `${DuckDuckGoCoverProvider.JSON_BASE_URL}${encodeURIComponent(query)}${searchParams}&vqd=${vqd}`;
     const apiResponse = await fetch(apiUrl, {
+      signal,
       headers: {
         'User-Agent': COVER_PROXY_USER_AGENT,
         Accept: 'application/json, text/javascript, */*; q=0.01',
@@ -100,20 +166,13 @@ export class DuckDuckGoCoverProvider implements CoverProvider {
 
     if (!apiResponse.ok) {
       this.logger.warn(`API fetch failed: ${apiResponse.status}`);
-      return [];
+      return { images: [], failed: true };
     }
 
-    const data = (await apiResponse.json()) as any;
-    const results: any[] = data.results || [];
-
-    return results.map((r) => ({
-      previewUrl: r.thumbnail,
-      sourceUrl: r.image,
-      width: r.width,
-      height: r.height,
-      source: this.determineSource(r.image),
-      url: r.image, // Will be proxied in the controller
-    }));
+    const data = JSON.parse(await readBoundedText(apiResponse, MAX_SEARCH_BYTES)) as { results?: unknown } | null;
+    if (!Array.isArray(data?.results)) return { images: [], failed: true };
+    const images = data.results.filter((result): result is DuckDuckGoImage => Boolean(result && typeof result === 'object'));
+    return { images, failed: false };
   }
 
   private filterResults(results: CoverSearchResult[], isAudiobook: boolean | undefined): CoverSearchResult[] {

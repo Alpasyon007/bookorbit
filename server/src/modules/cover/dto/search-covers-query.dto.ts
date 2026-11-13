@@ -1,9 +1,6 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-
-import { COVER_PROVIDER_ALL_KEY, COVER_PROVIDER_KEYS, type CoverSearchProvider } from '../providers/cover-provider';
-
-const COVER_SEARCH_PROVIDER_VALUES = [...COVER_PROVIDER_KEYS, COVER_PROVIDER_ALL_KEY] as const;
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateBy } from 'class-validator';
+import { isCoverSearchSourceKey } from '@bookorbit/types';
 
 function trimQueryString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -24,11 +21,13 @@ export class SearchCoversQueryDto {
   @Transform(({ value }) => trimQueryString(value))
   @IsString()
   @IsNotEmpty()
+  @MaxLength(500)
   title!: string;
 
   @IsOptional()
   @Transform(({ value }) => trimQueryString(value))
   @IsString()
+  @MaxLength(255)
   author?: string;
 
   @IsOptional()
@@ -37,7 +36,6 @@ export class SearchCoversQueryDto {
   isAudiobook?: boolean;
 
   @IsOptional()
-  @IsString()
-  @IsIn(COVER_SEARCH_PROVIDER_VALUES)
-  provider?: CoverSearchProvider;
+  @ValidateBy({ name: 'isCoverSearchSourceKey', validator: { validate: isCoverSearchSourceKey } })
+  provider?: string;
 }

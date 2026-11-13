@@ -6,6 +6,7 @@ import { BookMetadataLockModule } from '../book-metadata-lock/book-metadata-lock
 import { FileWriteModule } from '../file-write/file-write.module';
 import { LibraryModule } from '../library/library.module';
 import { MetadataModule } from '../metadata/metadata.module';
+import { MetadataFetchModule } from '../metadata-fetch/metadata-fetch.module';
 import { MetadataPreferencesModule } from '../metadata-preferences/metadata-preferences.module';
 import { MetadataScoreModule } from '../metadata-score/metadata-score.module';
 import { COVER_PROVIDERS } from './constants';
@@ -29,6 +30,7 @@ const PROVIDER_CLASSES = [DuckDuckGoCoverProvider, ITunesCoverProvider, Audioboo
     FileWriteModule,
     LibraryModule,
     MetadataModule,
+    MetadataFetchModule,
     MetadataPreferencesModule,
     MetadataScoreModule,
   ],

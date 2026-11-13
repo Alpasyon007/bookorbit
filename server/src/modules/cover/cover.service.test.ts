@@ -151,11 +151,11 @@ describe('CoverService', () => {
       } as unknown as CoverProviderRegistry;
       const service = createService(providerRegistry);
 
-      const results = await service.searchCovers({ title: 'Dune', author: 'Frank Herbert', provider: 'all' });
+      const { results } = await service.searchCovers({ title: 'Dune', author: 'Frank Herbert', provider: 'all' });
 
       expect((providerRegistry.select as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]).toBe('all');
-      expect(providerA.search).toHaveBeenCalledWith({ title: 'Dune', author: 'Frank Herbert' });
-      expect(providerB.search).toHaveBeenCalledWith({ title: 'Dune', author: 'Frank Herbert' });
+      expect(providerA.search).toHaveBeenCalledWith({ title: 'Dune', author: 'Frank Herbert', signal: expect.any(AbortSignal) });
+      expect(providerB.search).toHaveBeenCalledWith({ title: 'Dune', author: 'Frank Herbert', signal: expect.any(AbortSignal) });
       expect(results).toHaveLength(3);
       expect(results.map((result) => result.sourceUrl)).toEqual([
         'https://img.example/a.jpg',
@@ -195,7 +195,7 @@ describe('CoverService', () => {
       } as unknown as CoverProviderRegistry;
       const service = createService(providerRegistry);
 
-      const results = await service.searchCovers({ title: 'Dune', provider: 'all' });
+      const { results } = await service.searchCovers({ title: 'Dune', provider: 'all' });
 
       expect(results.map((result) => result.sourceUrl)).toEqual([
         'https://img.example/ddg-1.jpg',
@@ -221,7 +221,7 @@ describe('CoverService', () => {
       } as unknown as CoverProviderRegistry;
       const service = createService(providerRegistry);
 
-      const results = await service.searchCovers({ title: 'The Martian', author: 'Andy Weir', isAudiobook: true, provider: 'itunes' });
+      const { results } = await service.searchCovers({ title: 'The Martian', author: 'Andy Weir', isAudiobook: true, provider: 'itunes' });
 
       expect(provider.search).toHaveBeenCalledWith({
         title: 'The Martian',
@@ -231,6 +231,41 @@ describe('CoverService', () => {
       });
       expect(results).toHaveLength(1);
       expect(results[0].previewUrl).toBe('/api/v1/books/cover/proxy?url=https%3A%2F%2Fthumb.example%2Fit.jpg');
+    });
+
+    it('keeps successful results and reports unavailable providers', async () => {
+      const providers = [
+        { key: 'hachette-uk', search: vi.fn().mockResolvedValue({ results: [], failed: true }) },
+        { key: 'waterstones', search: vi.fn().mockRejectedValue(new Error('timed out')) },
+        { key: 'foyles', search: vi.fn().mockResolvedValue([makeResult('https://img.example/a.jpg', 'https://thumb.example/a.jpg')]) },
+      ];
+      const service = createService({ select: vi.fn().mockResolvedValue(providers) } as unknown as CoverProviderRegistry);
+
+      const response = await service.searchCovers({ title: 'Dune', provider: 'all' });
+
+      expect(response.failedSources).toEqual(['hachette-uk', 'waterstones']);
+      expect(response.results).toHaveLength(1);
+    });
+
+    it('stops queued sources at the shared deadline and reports them as unavailable', async () => {
+      const deadline = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+      const search = vi.fn(
+        ({ signal }: { signal: AbortSignal }) =>
+          new Promise<CoverSearchResult[]>((resolve) => {
+            signal.addEventListener('abort', () => resolve([]), { once: true });
+          }),
+      );
+      const providers = Array.from({ length: 6 }, (_, index) => ({ key: `source-${index}`, search }));
+      const service = createService({ select: vi.fn().mockResolvedValue(providers) } as unknown as CoverProviderRegistry);
+
+      const result = service.searchCovers({ title: 'Dune', provider: 'all' });
+      await Promise.resolve();
+      expect(search).toHaveBeenCalledTimes(4);
+      deadline.abort();
+
+      await expect(result).resolves.toEqual({ results: [], failedSources: providers.map(({ key }) => key) });
+      expect(search).toHaveBeenCalledTimes(4);
     });
   });
 

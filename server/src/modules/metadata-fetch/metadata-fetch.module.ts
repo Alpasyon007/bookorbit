@@ -7,6 +7,7 @@ import { MetadataPreferencesModule } from '../metadata-preferences/metadata-pref
 import { BookProviderCacheRegistrar } from './book-provider-cache.registrar';
 import { METADATA_PROVIDERS } from './constants';
 import { MetadataFetchController } from './metadata-fetch.controller';
+import { MetadataCoverSearchService } from './metadata-cover-search.service';
 import { MetadataFetchPipeline } from './metadata-fetch-pipeline';
 import { MetadataProvider } from './providers/metadata-provider';
 import { MetadataFetchService } from './metadata-fetch.service';
@@ -65,10 +66,19 @@ const PROVIDER_CLASSES = [
     ProviderIdRepository,
     ProviderIdStore,
     MetadataFetchService,
+    MetadataCoverSearchService,
     MetadataFetchPipeline,
     BookProviderCacheRegistrar,
   ],
   controllers: [MetadataFetchController],
-  exports: [SeriesCatalogService, MetadataFetchService, MetadataFetchPipeline, ProviderRegistry, ProviderThrottleTracker, ProviderIdStore],
+  exports: [
+    SeriesCatalogService,
+    MetadataFetchService,
+    MetadataCoverSearchService,
+    MetadataFetchPipeline,
+    ProviderRegistry,
+    ProviderThrottleTracker,
+    ProviderIdStore,
+  ],
 })
 export class MetadataFetchModule {}

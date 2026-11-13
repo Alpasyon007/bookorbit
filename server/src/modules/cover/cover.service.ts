@@ -3,6 +3,7 @@ import { CoverSearchResult, type CoverMedium } from '@bookorbit/types';
 import type { BookCoverSource } from '../book-cover-store/book-cover-store.repository';
 
 import type { RequestUser } from '../../common/types/request-user';
+import { mapWithConcurrency } from '../../common/utils/batch.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { ensureSafeRemoteHost } from '../../common/utils/ssrf.utils';
 import { BookReadService } from '../book/book-read.service';
@@ -13,17 +14,14 @@ import { LibraryService } from '../library/library.service';
 import { MetadataScoreService } from '../metadata-score/metadata-score.service';
 import { COVER_PROXY_MAX_IMAGE_BYTES, COVER_PROXY_MAX_REDIRECTS, COVER_PROXY_TIMEOUT_MS, COVER_PROXY_USER_AGENT } from './constants';
 import { CoverProviderRegistry } from './provider-registry';
-import {
-  COVER_PROVIDER_ALL_KEY,
-  type CoverProviderKey,
-  type CoverSearchParams,
-  DUCKDUCKGO_PROVIDER_KEY,
-  ITUNES_PROVIDER_KEY,
-} from './providers/cover-provider';
+import { COVER_PROVIDER_ALL_KEY, type CoverSearchParams, DUCKDUCKGO_PROVIDER_KEY, ITUNES_PROVIDER_KEY } from './providers/cover-provider';
 
 const SAFE_REMOTE_PROTOCOLS = new Set(['http:', 'https:']);
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const ITUNES_INTERLEAVE_LIMIT = 5;
+const COVER_SEARCH_CONCURRENCY = 4;
+const COVER_SEARCH_MAX_RESULTS = 120;
+const ALL_COVER_SEARCH_TIMEOUT_MS = 25_000;
 
 @Injectable()
 export class CoverService {
@@ -39,36 +37,42 @@ export class CoverService {
     private readonly coverStore: BookCoverStore,
   ) {}
 
-  async searchCovers(params: CoverSearchParams & { provider?: string }): Promise<CoverSearchResult[]> {
-    const { provider, ...searchParams } = params;
-    const providers = this.providerRegistry.select(provider);
-    const resultsByProvider = new Map<CoverProviderKey, CoverSearchResult[]>();
+  listCoverSources() {
+    return this.providerRegistry.list();
+  }
 
-    for (const coverProvider of providers) {
-      let results: CoverSearchResult[] = [];
+  async searchCovers(params: CoverSearchParams & { provider?: string }): Promise<{ results: CoverSearchResult[]; failedSources: string[] }> {
+    const { provider, ...searchParams } = params;
+    const providers = await this.providerRegistry.select(provider, searchParams.isAudiobook);
+    const signal = provider === COVER_PROVIDER_ALL_KEY ? AbortSignal.timeout(ALL_COVER_SEARCH_TIMEOUT_MS) : undefined;
+    const outputs = await mapWithConcurrency(providers, COVER_SEARCH_CONCURRENCY, async (coverProvider) => {
+      if (signal?.aborted) return { results: [], failed: true };
+      const startedAt = Date.now();
+
       try {
         const providerSearchParams =
           provider === ITUNES_PROVIDER_KEY && coverProvider.key === ITUNES_PROVIDER_KEY
             ? { ...searchParams, ignoreProviderEnabled: true }
             : searchParams;
-        results = await coverProvider.search(providerSearchParams);
+        const output = await coverProvider.search(signal ? { ...providerSearchParams, signal } : providerSearchParams);
+        return Array.isArray(output) ? { results: output, failed: signal?.aborted ?? false } : output;
       } catch (error) {
         this.logger.warn(
-          `[cover.search_provider] [fail] provider=${coverProvider.key} errorClass=${errorClass(error)} error="${sanitizeErrorMessage(error)}" - cover provider search failed`,
+          `[cover.search_provider] [fail] provider=${coverProvider.key} durationMs=${Date.now() - startedAt} errorClass=${errorClass(error)} error="${sanitizeErrorMessage(error)}" - cover provider search failed`,
         );
+        return { results: [], failed: true };
       }
-      resultsByProvider.set(coverProvider.key, results);
-    }
+    });
+    const keys = providers.map((entry) => entry.key);
+    const resultsByProvider = new Map(keys.map((key, index) => [key, outputs[index].results]));
 
     const ordered =
-      provider === COVER_PROVIDER_ALL_KEY
-        ? this.orderAllProviderResults(
-            providers.map((providerEntry) => providerEntry.key),
-            resultsByProvider,
-          )
-        : providers.flatMap((providerEntry) => resultsByProvider.get(providerEntry.key) ?? []);
+      provider === COVER_PROVIDER_ALL_KEY ? this.orderAllProviderResults(keys, resultsByProvider) : outputs.flatMap((output) => output.results);
 
-    return this.dedupeAndProxy(ordered);
+    return {
+      results: this.dedupeAndProxy(ordered),
+      failedSources: keys.filter((_, index) => outputs[index].failed),
+    };
   }
 
   async proxyImage(url: string): Promise<{ buffer: Buffer; contentType: string }> {
@@ -161,7 +165,7 @@ export class CoverService {
     }
   }
 
-  private orderAllProviderResults(keys: CoverProviderKey[], resultsByProvider: Map<CoverProviderKey, CoverSearchResult[]>): CoverSearchResult[] {
+  private orderAllProviderResults(keys: string[], resultsByProvider: Map<string, CoverSearchResult[]>): CoverSearchResult[] {
     const duckDuckGoResults = resultsByProvider.get(DUCKDUCKGO_PROVIDER_KEY) ?? [];
     const iTunesResults = resultsByProvider.get(ITUNES_PROVIDER_KEY) ?? [];
     const interleaved = this.interleaveITunesWithDuckDuckGo(duckDuckGoResults, iTunesResults, ITUNES_INTERLEAVE_LIMIT);
@@ -205,6 +209,7 @@ export class CoverService {
         ...result,
         previewUrl: `/api/v1/books/cover/proxy?url=${encodeURIComponent(result.previewUrl)}`,
       });
+      if (deduped.length >= COVER_SEARCH_MAX_RESULTS) break;
     }
     return deduped;
   }

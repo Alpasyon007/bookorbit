@@ -13,7 +13,7 @@ import {
   BOOK_VIEW_MODES,
   CARD_INFO_MODES,
   CARD_OVERLAY_KEYS,
-  COVER_SEARCH_DEFAULT_PROVIDERS,
+  isCoverSearchSourceKey,
   COVER_SIZE_SCOPES,
   DEFAULT_BOOK_REQUEST_PREFERENCES,
   DEFAULT_READ_ALOUD_PREFERENCES,
@@ -110,7 +110,7 @@ const DISPLAY_PREFERENCES_SCHEMA = z
 
 const COVER_SEARCH_PREFERENCES_SCHEMA = z
   .object({
-    defaultProvider: z.enum(COVER_SEARCH_DEFAULT_PROVIDERS),
+    defaultProvider: z.custom<string>(isCoverSearchSourceKey),
   })
   .strict();
 

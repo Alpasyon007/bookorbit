@@ -37,5 +37,18 @@
     "allowDefault": false,
     "useGuards": [],
     "apiKey": "read"
+  },
+  {
+    "file": "server/src/modules/cover/cover.controller.ts",
+    "className": "CoverController",
+    "methodName": "listCoverSources",
+    "httpMethod": "GET",
+    "path": "/books/cover/sources",
+    "permissions": ["Permission.LibraryEditMetadata"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
   }
 ]

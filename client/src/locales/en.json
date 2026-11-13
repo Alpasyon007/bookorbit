@@ -279,7 +279,7 @@
         "title": "Book Covers",
         "coverSearch": {
           "label": "Default cover search provider",
-          "hint": "Choose the source selected when Find cover online opens. Saved to your account, so it applies on every device.",
+          "hint": "Choose the source selected when Find cover online opens. DuckDuckGo is used when your preferred source is unavailable for that format.",
           "loadError": "Failed to load the default cover search provider",
           "saveError": "Failed to save the default cover search provider"
         },
@@ -6860,6 +6860,8 @@
         "selectCover": "Select Cover",
         "noResultsTitle": "No results found",
         "noResultsHint": "Try adjusting your search terms",
+        "searchFailed": "Could not complete the cover search",
+        "sourcesUnavailable": "Could not search {sources}. Try again later.",
         "readyTitle": "Ready to search",
         "readyHint": "Enter a title and author above",
         "resolutionTip": "Tip: High resolution covers are marked in green"

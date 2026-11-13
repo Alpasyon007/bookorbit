@@ -169,13 +169,18 @@ describe('UserPreferencesService', () => {
     await expect(service.getCoverSearchPreferences(7)).resolves.toEqual({ defaultProvider: 'duckduckgo' });
   });
 
-  it.each(['duckduckgo', 'itunes', 'all'] as const)('upsertCoverSearchPreferences accepts %s', async (defaultProvider) => {
-    await expect(service.upsertCoverSearchPreferences(11, { defaultProvider })).resolves.toBeUndefined();
-    expect(repo.upsert).toHaveBeenCalledWith(11, 'cover-search', { defaultProvider });
-  });
+  it.each(['duckduckgo', 'itunes', 'all', 'foyles', 'audiobookcovers', 'metadata:hardcover', 'metadata:local-catalog'] as const)(
+    'upsertCoverSearchPreferences accepts %s',
+    async (defaultProvider) => {
+      await expect(service.upsertCoverSearchPreferences(11, { defaultProvider })).resolves.toBeUndefined();
+      expect(repo.upsert).toHaveBeenCalledWith(11, 'cover-search', { defaultProvider });
+    },
+  );
 
-  it('upsertCoverSearchPreferences rejects a provider that is not valid for every book', async () => {
-    await expect(service.upsertCoverSearchPreferences(11, { defaultProvider: 'audiobookcovers' })).rejects.toBeInstanceOf(BadRequestException);
+  it('upsertCoverSearchPreferences rejects an invalid source key', async () => {
+    await expect(service.upsertCoverSearchPreferences(11, { defaultProvider: 'metadata:https://example.com' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(repo.upsert).not.toHaveBeenCalled();
   });
 

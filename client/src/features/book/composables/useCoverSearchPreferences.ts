@@ -1,9 +1,4 @@
-import {
-  COVER_SEARCH_DEFAULT_PROVIDERS,
-  DEFAULT_COVER_SEARCH_PROVIDER,
-  type CoverSearchDefaultProvider,
-  type CoverSearchPreferences,
-} from '@bookorbit/types'
+import { DEFAULT_COVER_SEARCH_PROVIDER, isCoverSearchSourceKey, type CoverSearchDefaultProvider, type CoverSearchPreferences } from '@bookorbit/types'
 import { ref } from 'vue'
 import { api } from '@/lib/api'
 
@@ -17,9 +12,7 @@ let hasLoaded = false
 let inFlightLoad: Promise<boolean> | null = null
 
 function normalizeProvider(value: unknown): CoverSearchDefaultProvider {
-  return typeof value === 'string' && COVER_SEARCH_DEFAULT_PROVIDERS.includes(value as CoverSearchDefaultProvider)
-    ? (value as CoverSearchDefaultProvider)
-    : DEFAULT_COVER_SEARCH_PROVIDER
+  return isCoverSearchSourceKey(value) ? value : DEFAULT_COVER_SEARCH_PROVIDER
 }
 
 async function fetchPreferences(): Promise<boolean> {

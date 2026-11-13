@@ -1,11 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
+import { COVER_SEARCH_FAILED_SOURCES_HEADER } from '@bookorbit/types'
+
+const sourcesMock = await vi.hoisted(async () => {
+  const { shallowRef } = await import('vue')
+  const { BUILT_IN_COVER_SEARCH_SOURCES } = await import('@bookorbit/types')
+  return { sources: shallowRef(BUILT_IN_COVER_SEARCH_SOURCES), builtin: BUILT_IN_COVER_SEARCH_SOURCES, load: vi.fn<() => Promise<void>>() }
+})
+
+vi.mock('@/features/book/composables/useCoverSearchSources', () => ({ useCoverSearchSources: () => sourcesMock }))
 
 const coverSearchPreferenceMock = await vi.hoisted(async () => {
   const { ref } = await import('vue')
   return {
-    defaultProvider: ref<'duckduckgo' | 'itunes' | 'all'>('duckduckgo'),
+    defaultProvider: ref('duckduckgo'),
     isLoading: ref(false),
     load: vi.fn<() => Promise<boolean>>(),
   }
@@ -93,6 +102,8 @@ describe('CoverSearchDrawer', () => {
     coverSearchPreferenceMock.defaultProvider.value = 'duckduckgo'
     coverSearchPreferenceMock.isLoading.value = false
     coverSearchPreferenceMock.load.mockResolvedValue(true)
+    sourcesMock.sources.value = sourcesMock.builtin
+    sourcesMock.load.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -157,6 +168,21 @@ describe('CoverSearchDrawer', () => {
       await flushPromises()
 
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('all')
+    })
+
+    it('restores a metadata source once it loads and falls back for the wrong medium', async () => {
+      coverSearchPreferenceMock.defaultProvider.value = 'metadata:openLibrary'
+      sourcesMock.load.mockImplementationOnce(async () => {
+        sourcesMock.sources.value = [...sourcesMock.builtin, { key: 'metadata:openLibrary', label: 'Open Library', media: ['ebook'] }]
+      })
+      const wrapper = mountDrawer()
+      await flushPromises()
+      expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('metadata:openLibrary')
+      expect(wrapper.text()).toContain('Hachette UK (via DuckDuckGo)')
+
+      await wrapper.get('input[type="checkbox"]').trigger('change')
+      expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('duckduckgo')
+      expect(wrapper.text()).not.toContain('Hachette UK (via DuckDuckGo)')
     })
   })
 
@@ -421,6 +447,20 @@ describe('CoverSearchDrawer', () => {
 
       expect(vm.searchResults).toHaveLength(0)
       expect(consoleSpy).toHaveBeenCalled()
+      expect(wrapper.text()).toContain('Could not complete the cover search')
+      consoleSpy.mockRestore()
+    })
+
+    it('shows a provider failure next to available cover results', async () => {
+      const response = new Response(JSON.stringify([makeCoverResult('https://img/a')]), {
+        headers: { [COVER_SEARCH_FAILED_SOURCES_HEADER]: 'foyles' },
+      })
+      vi.stubGlobal('fetch', () => Promise.resolve(response))
+      const wrapper = mountDrawer()
+      await (wrapper.vm as unknown as DrawerVm).performSearch()
+
+      expect(wrapper.get('[role="status"]').text()).toContain('Foyles (via DuckDuckGo)')
+      expect(wrapper.get('img').attributes('src')).toBe('https://img/a?thumb')
     })
 
     it('emits select and closes drawer when handleSelect is called', async () => {

@@ -1,10 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
+import { COVER_SEARCH_FAILED_SOURCES_HEADER } from '@bookorbit/types';
 
 import { CoverController } from './cover.controller';
 
 describe('CoverController', () => {
   const coverService = {
     searchCovers: vi.fn(),
+    listCoverSources: vi.fn(),
     proxyImage: vi.fn(),
     uploadCover: vi.fn(),
     uploadCoverFromUrl: vi.fn(),
@@ -18,12 +20,19 @@ describe('CoverController', () => {
   });
 
   it('passes search filters to cover service', async () => {
-    await controller.searchCovers({
-      title: 'Dune',
-      author: 'Frank Herbert',
-      isAudiobook: true,
-      provider: 'all',
-    } as never);
+    const response = { header: vi.fn() };
+    coverService.searchCovers.mockResolvedValue({ results: [], failedSources: ['hachette-uk'] });
+    await expect(
+      controller.searchCovers(
+        {
+          title: 'Dune',
+          author: 'Frank Herbert',
+          isAudiobook: true,
+          provider: 'all',
+        },
+        response as never,
+      ),
+    ).resolves.toEqual([]);
 
     expect(coverService.searchCovers).toHaveBeenCalledWith({
       title: 'Dune',
@@ -31,6 +40,12 @@ describe('CoverController', () => {
       isAudiobook: true,
       provider: 'all',
     });
+    expect(response.header).toHaveBeenCalledWith(COVER_SEARCH_FAILED_SOURCES_HEADER, 'hachette-uk');
+  });
+
+  it('lists available cover sources', async () => {
+    coverService.listCoverSources.mockResolvedValue([{ key: 'metadata:hardcover', label: 'Hardcover', media: ['ebook', 'audio'] }]);
+    await expect(controller.listCoverSources()).resolves.toEqual([{ key: 'metadata:hardcover', label: 'Hardcover', media: ['ebook', 'audio'] }]);
   });
 
   it('writes proxied image content to the response object', async () => {

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { Image } from '@lucide/vue'
-import { COVER_SEARCH_DEFAULT_PROVIDERS, type CoverSearchDefaultProvider } from '@bookorbit/types'
+import { DEFAULT_COVER_SEARCH_PROVIDER } from '@bookorbit/types'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import {
   useDisplaySettings,
@@ -18,6 +18,7 @@ import {
 import BookCardFormatBadges from '@/features/book/components/BookCardFormatBadges.vue'
 import BookCoverPlaceholder from '@/features/book/components/BookCoverPlaceholder.vue'
 import { useCoverSearchPreferences } from '@/features/book/composables/useCoverSearchPreferences'
+import { useCoverSearchSources } from '@/features/book/composables/useCoverSearchSources'
 
 const { t } = useI18n()
 
@@ -38,6 +39,7 @@ const {
   load: loadCoverSearchPreferences,
   update: updateCoverSearchPreferences,
 } = useCoverSearchPreferences()
+const { sources: coverSearchSources, load: loadCoverSearchSources } = useCoverSearchSources()
 
 // Bibliographic sample data, so it stays untranslated like any other book in the library. The set
 // spans short and long titles, a series, and several genres, since each style colours by genre.
@@ -123,11 +125,15 @@ const placeholderStyleOptions = computed<{ id: PlaceholderCoverStyle; label: str
   { id: 'paperback', label: t('settings.appearance.bookCovers.placeholderStyle.options.paperback') },
 ])
 
-const coverSearchProviderOptions = computed<{ id: CoverSearchDefaultProvider; label: string }[]>(() => [
-  { id: 'duckduckgo', label: 'DuckDuckGo' },
-  { id: 'itunes', label: 'iTunes' },
+const coverSearchProviderOptions = computed(() => [
+  ...coverSearchSources.value.map(({ key, label }) => ({ id: key, label })),
   { id: 'all', label: t('book.detail.coverSearch.allSources') },
 ])
+const displayedDefaultProvider = computed(() =>
+  coverSearchProviderOptions.value.some(({ id }) => id === defaultCoverSearchProvider.value)
+    ? defaultCoverSearchProvider.value
+    : DEFAULT_COVER_SEARCH_PROVIDER,
+)
 
 const overlayOptions = computed<{ key: CardOverlayKey; label: string; hint: string }[]>(() => [
   {
@@ -311,13 +317,14 @@ function setBookDetailCoverTint(mode: BookDetailCoverTint) {
 
 async function handleDefaultCoverSearchProviderChange(event: Event) {
   const value = (event.currentTarget as HTMLSelectElement).value
-  if (!COVER_SEARCH_DEFAULT_PROVIDERS.includes(value as CoverSearchDefaultProvider)) return
+  if (!coverSearchProviderOptions.value.some(({ id }) => id === value)) return
 
-  const saved = await updateCoverSearchPreferences(value as CoverSearchDefaultProvider)
+  const saved = await updateCoverSearchPreferences(value)
   if (!saved) toast.error(t('settings.appearance.bookCovers.coverSearch.saveError'))
 }
 
 onMounted(async () => {
+  void loadCoverSearchSources()
   const loaded = await loadCoverSearchPreferences()
   if (!loaded) toast.error(t('settings.appearance.bookCovers.coverSearch.loadError'))
 })
@@ -340,7 +347,7 @@ onMounted(async () => {
         </div>
         <select
           id="default-cover-search-provider"
-          :value="defaultCoverSearchProvider"
+          :value="displayedDefaultProvider"
           class="h-9 min-w-40 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           :disabled="isCoverSearchPreferenceLoading || isCoverSearchPreferenceSaving"
           @change="handleDefaultCoverSearchProviderChange"

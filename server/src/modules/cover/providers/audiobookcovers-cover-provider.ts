@@ -31,12 +31,13 @@ export class AudiobookCoversCoverProvider implements CoverProvider {
     if (author) url.searchParams.set('author', author);
 
     try {
+      const timeout = AbortSignal.timeout(10_000);
       const response = await fetch(url.toString(), {
         headers: {
           'User-Agent': COVER_PROXY_USER_AGENT,
           Accept: 'text/html,application/xhtml+xml',
         },
-        signal: AbortSignal.timeout(10_000),
+        signal: params.signal ? AbortSignal.any([timeout, params.signal]) : timeout,
       });
 
       if (!response.ok) {

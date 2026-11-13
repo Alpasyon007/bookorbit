@@ -63,6 +63,7 @@ export type MetadataSearchEvent =
 
 export interface MetadataSearchOptions {
   directive?: CacheDirective;
+  signal?: AbortSignal;
   /** Per-provider overrides, e.g. answering providers in cooldown from the cache only. */
   directiveByProvider?: Partial<Record<MetadataProviderKey, CacheDirective>>;
 }
@@ -102,7 +103,7 @@ export class MetadataFetchService {
     const canonical = canonicalizeSearchParams(params);
     return merge(
       ...providers.map((provider) =>
-        from(this.runProvider(provider, canonical, directiveFor(provider.key, options))).pipe(
+        from(this.runProvider(provider, canonical, directiveFor(provider.key, options), options?.signal)).pipe(
           switchMap((result) => from(toSearchEvents(provider.key, result))),
         ),
       ),
@@ -190,18 +191,30 @@ export class MetadataFetchService {
     return provider.timeoutMs ?? MetadataFetchService.PROVIDER_TIMEOUT_MS;
   }
 
-  private async runProvider(provider: MetadataProvider, params: MetadataSearchParams, directive: CacheDirective): Promise<ProviderSearchResult> {
+  private async runProvider(
+    provider: MetadataProvider,
+    params: MetadataSearchParams,
+    directive: CacheDirective,
+    signal?: AbortSignal,
+  ): Promise<ProviderSearchResult> {
     const startedAt = Date.now();
     this.logger.log(`[metadata_fetch.provider_search] [start] provider=${provider.key} policy=${directive.policy} - provider fetch started`);
 
     const timeoutMs = this.timeoutFor(provider);
     const context = await this.executor.resolveContext(provider.cache);
     const deadline = createDeadline(timeoutMs);
-    const run = new ProviderRun(provider, params, directive, context, deadline.signal, this.executor);
+    const run = new ProviderRun(
+      provider,
+      params,
+      directive,
+      context,
+      signal ? AbortSignal.any([deadline.signal, signal]) : deadline.signal,
+      this.executor,
+    );
     const summary = (): ProviderRunSummary => ({ provider: provider.key, served: run.served, outboundRequests: run.outboundRequests });
 
     try {
-      const ranked = await withHardGuard(this.fetchFromProvider(run), timeoutMs + HARD_GUARD_MARGIN_MS);
+      const ranked = await withHardGuard(this.fetchFromProvider(run), timeoutMs + HARD_GUARD_MARGIN_MS, signal);
       if (ranked === HARD_GUARD_HIT) {
         this.logger.warn(
           `[metadata_fetch.provider_search] [fail] provider=${provider.key} durationMs=${Date.now() - startedAt} errorClass=TimeoutError error="provider ignored its deadline" - provider fetch failed`,
@@ -319,15 +332,20 @@ function withCacheInfo(candidates: MetadataCandidate[], operation: RunOperation<
   return candidates.map((candidate) => (operation.cache ? { candidate, cache: operation.cache } : { candidate }));
 }
 
-async function withHardGuard<T>(promise: Promise<T>, timeoutMs: number): Promise<T | typeof HARD_GUARD_HIT> {
+async function withHardGuard<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T | typeof HARD_GUARD_HIT> {
   let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   const guard = new Promise<typeof HARD_GUARD_HIT>((resolve) => {
+    onAbort = () => resolve(HARD_GUARD_HIT);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
     timer = setTimeout(() => resolve(HARD_GUARD_HIT), timeoutMs);
   });
   try {
     return await Promise.race([promise, guard]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
   }
 }
 

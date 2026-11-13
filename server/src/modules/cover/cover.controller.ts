@@ -1,4 +1,4 @@
-import { Permission } from '@bookorbit/types';
+import { COVER_SEARCH_FAILED_SOURCES_HEADER, Permission } from '@bookorbit/types';
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -15,15 +15,23 @@ import { CoverMediumQueryDto } from './dto/cover-medium-query.dto';
 export class CoverController {
   constructor(private readonly coverService: CoverService) {}
 
+  @Get('cover/sources')
+  @RequirePermission(Permission.LibraryEditMetadata)
+  listCoverSources() {
+    return this.coverService.listCoverSources();
+  }
+
   @Get('cover/search')
   @RequirePermission(Permission.LibraryEditMetadata)
-  async searchCovers(@Query() query: SearchCoversQueryDto) {
-    return this.coverService.searchCovers({
+  async searchCovers(@Query() query: SearchCoversQueryDto, @Res({ passthrough: true }) response: FastifyReply) {
+    const { results, failedSources } = await this.coverService.searchCovers({
       title: query.title,
       author: query.author,
       isAudiobook: query.isAudiobook,
       provider: query.provider,
     });
+    if (failedSources.length) response.header(COVER_SEARCH_FAILED_SOURCES_HEADER, failedSources.join(','));
+    return results;
   }
 
   @Get('cover/proxy')

@@ -2,9 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search, Loader2, Image as ImageIcon, Check } from '@lucide/vue'
-import type { CoverSearchDefaultProvider, CoverSearchResult } from '@bookorbit/types'
+import { COVER_SEARCH_FAILED_SOURCES_HEADER, DEFAULT_COVER_SEARCH_PROVIDER, type CoverSearchResult } from '@bookorbit/types'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCoverSearchPreferences } from '@/features/book/composables/useCoverSearchPreferences'
+import { useCoverSearchSources } from '@/features/book/composables/useCoverSearchSources'
 
 const props = defineProps<{
   open: boolean
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const { defaultProvider, load: loadCoverSearchPreferences } = useCoverSearchPreferences()
+const { sources, load: loadCoverSearchSources } = useCoverSearchSources()
 
 const emit = defineEmits<{
   'update:open': [boolean]
@@ -23,25 +25,34 @@ const emit = defineEmits<{
 
 const searchTitle = ref(props.initialTitle)
 const searchAuthor = ref(props.initialAuthor)
-type SearchProvider = CoverSearchDefaultProvider | 'audiobookcovers'
-
-const searchProvider = ref<SearchProvider>(defaultProvider.value)
+const searchProvider = ref(DEFAULT_COVER_SEARCH_PROVIDER)
 const isAudiobookSearch = ref(props.isAudiobook)
 const isSearching = ref(false)
 const searchResults = ref<CoverSearchResult[]>([])
 const hasSearched = ref(false)
+const searchFailed = ref(false)
+const failedSources = ref<string[]>([])
 let openSequence = 0
+let activeSearch: AbortController | undefined
 
 const resultAspectClass = computed(() => (isAudiobookSearch.value ? 'aspect-square' : 'aspect-[2/3]'))
+const mediumSources = computed(() => sources.value.filter((source) => source.media.includes(isAudiobookSearch.value ? 'audio' : 'ebook')))
+
+function availableProvider(key: string) {
+  return key === 'all' || mediumSources.value.some((source) => source.key === key) ? key : DEFAULT_COVER_SEARCH_PROVIDER
+}
 
 onMounted(() => {
-  void loadCoverSearchPreferences()
+  if (!props.open) void loadCoverSearchPreferences()
 })
 
 watch(
   () => props.open,
   async (val) => {
     const sequence = ++openSequence
+    activeSearch?.abort()
+    activeSearch = undefined
+    isSearching.value = false
     if (!val) return
 
     searchTitle.value = props.initialTitle
@@ -49,27 +60,32 @@ watch(
     isAudiobookSearch.value = props.isAudiobook
     searchResults.value = []
     hasSearched.value = false
+    searchFailed.value = false
+    failedSources.value = []
 
-    const openedWith = defaultProvider.value
+    const openedWith = availableProvider(defaultProvider.value)
     searchProvider.value = openedWith
 
-    await loadCoverSearchPreferences()
-    if (sequence === openSequence && searchProvider.value === openedWith) searchProvider.value = defaultProvider.value
+    await Promise.all([loadCoverSearchPreferences(), loadCoverSearchSources()])
+    if (sequence === openSequence && searchProvider.value === openedWith) searchProvider.value = availableProvider(defaultProvider.value)
   },
+  { immediate: true },
 )
 
 function toggleAudiobookSearch() {
   isAudiobookSearch.value = !isAudiobookSearch.value
-  if (!isAudiobookSearch.value && searchProvider.value === 'audiobookcovers') {
-    searchProvider.value = defaultProvider.value
-  }
+  if (availableProvider(searchProvider.value) !== searchProvider.value) searchProvider.value = availableProvider(defaultProvider.value)
 }
 
 async function performSearch() {
-  if (!searchTitle.value.trim()) return
+  if (!searchTitle.value.trim() || isSearching.value) return
+  const request = new AbortController()
+  activeSearch = request
   isSearching.value = true
   hasSearched.value = true
   searchResults.value = []
+  searchFailed.value = false
+  failedSources.value = []
   try {
     const params = new URLSearchParams({
       title: searchTitle.value.trim(),
@@ -77,13 +93,23 @@ async function performSearch() {
       isAudiobook: String(isAudiobookSearch.value),
       provider: searchProvider.value,
     })
-    const res = await fetch(`/api/v1/books/cover/search?${params}`)
+    const res = await fetch(`/api/v1/books/cover/search?${params}`, { signal: request.signal })
     if (!res.ok) throw new Error('Search failed')
-    searchResults.value = await res.json()
+    const results = (await res.json()) as CoverSearchResult[]
+    if (activeSearch !== request) return
+    searchResults.value = results
+    const failedKeys = res.headers.get(COVER_SEARCH_FAILED_SOURCES_HEADER)?.split(',') ?? []
+    failedSources.value = sources.value.filter((source) => failedKeys.includes(source.key)).map((source) => source.label)
   } catch (err) {
-    console.error('Search error:', err)
+    if (!request.signal.aborted) {
+      searchFailed.value = true
+      console.error('Search error:', err)
+    }
   } finally {
-    isSearching.value = false
+    if (activeSearch === request) {
+      activeSearch = undefined
+      isSearching.value = false
+    }
   }
 }
 
@@ -148,9 +174,7 @@ function handleOpenChange(val: boolean) {
                 v-model="searchProvider"
                 class="w-full h-9 md:h-10 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               >
-                <option value="duckduckgo">DuckDuckGo</option>
-                <option value="itunes">iTunes</option>
-                <option v-if="isAudiobookSearch" value="audiobookcovers">AudiobookCovers</option>
+                <option v-for="source in mediumSources" :key="source.key" :value="source.key">{{ source.label }}</option>
                 <option value="all">{{ t('book.detail.coverSearch.allSources') }}</option>
               </select>
             </div>
@@ -194,14 +218,19 @@ function handleOpenChange(val: boolean) {
 
       <!-- Results -->
       <div class="flex-1 overflow-y-auto p-4">
+        <p v-if="failedSources.length" role="status" class="mb-3 text-xs text-muted-foreground">
+          {{ t('book.detail.coverSearch.sourcesUnavailable', { sources: failedSources.join(', ') }) }}
+        </p>
         <div v-if="isSearching" class="grid grid-cols-3 gap-4">
           <div v-for="i in 9" :key="i" :class="[resultAspectClass, 'rounded-lg bg-muted animate-pulse']" />
         </div>
 
         <div v-else-if="searchResults.length > 0" class="grid grid-cols-3 gap-4">
-          <div
+          <button
             v-for="res in searchResults"
-            :key="String(res.url)"
+            :key="`${res.sourceUrl}|${res.url}`"
+            type="button"
+            :aria-label="`${t('book.detail.coverSearch.selectCover')} (${res.source})`"
             :class="[
               resultAspectClass,
               'group relative rounded-lg overflow-hidden bg-muted border border-border/50 hover:border-primary/50 hover:ring-4 hover:ring-primary/10 transition-all cursor-pointer',
@@ -210,6 +239,7 @@ function handleOpenChange(val: boolean) {
           >
             <img :src="res.previewUrl" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
             <div
+              v-if="res.width && res.height"
               class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2"
             >
               <div class="p-2 rounded-full bg-primary text-white scale-75 group-hover:scale-100 transition-transform">
@@ -226,7 +256,7 @@ function handleOpenChange(val: boolean) {
             <div class="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-white bg-black/50 backdrop-blur-md shadow-sm">
               {{ res.source }}
             </div>
-          </div>
+          </button>
         </div>
 
         <div v-else-if="hasSearched" class="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-60 py-12">
@@ -234,8 +264,12 @@ function handleOpenChange(val: boolean) {
             <ImageIcon class="size-10 text-muted-foreground" />
           </div>
           <div>
-            <h3 class="font-semibold">{{ t('book.detail.coverSearch.noResultsTitle') }}</h3>
-            <p class="text-xs text-muted-foreground">{{ t('book.detail.coverSearch.noResultsHint') }}</p>
+            <h3 class="font-semibold">
+              {{ t(searchFailed || failedSources.length ? 'book.detail.coverSearch.searchFailed' : 'book.detail.coverSearch.noResultsTitle') }}
+            </h3>
+            <p v-if="!searchFailed && !failedSources.length" class="text-xs text-muted-foreground">
+              {{ t('book.detail.coverSearch.noResultsHint') }}
+            </p>
           </div>
         </div>
         <div v-else class="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-60 py-12">
