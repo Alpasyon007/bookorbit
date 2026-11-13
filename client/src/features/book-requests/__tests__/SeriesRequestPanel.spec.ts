@@ -67,6 +67,54 @@ beforeEach(() => {
   })
 })
 describe('series requests', () => {
+  it('shows the empty state only after a successful series search', async () => {
+    const previous = state.api.getMockImplementation()!
+    state.api.mockImplementation((path, init) =>
+      path.includes('?q=') ? Promise.resolve(json({ items: [], nextOffset: null })) : previous(path, init),
+    )
+    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn() } })
+    const search = wrapper.get('#series-query')
+
+    expect(wrapper.text()).not.toContain('No series found')
+    await search.setValue('Unknown series')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toContain('No series found')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
+  it('keeps pagination tied to the submitted search while editing the input', async () => {
+    const previous = state.api.getMockImplementation()!
+    state.api.mockImplementation((path, init) =>
+      path.includes('?q=') ? Promise.resolve(json({ items: [{ id: 1, name: 'Example' }], nextOffset: 25 })) : previous(path, init),
+    )
+    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn() } })
+    const search = wrapper.get('#series-query')
+    await search.setValue('Original title')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    await search.setValue('Unsaved edit')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'More series')!
+      .trigger('click')
+    await flushPromises()
+
+    expect(state.api).toHaveBeenCalledWith('/api/v1/book-requests/series-catalog?q=Original%20title&offset=25', undefined)
+  })
+
+  it('shows an empty catalog message without showing submission options', async () => {
+    const previous = state.api.getMockImplementation()!
+    state.api.mockImplementation((path, init) =>
+      path.includes('/series-catalog/1') ? Promise.resolve(json({ items: [], nextOffset: null })) : previous(path, init),
+    )
+    const wrapper = await setup()
+
+    expect(wrapper.get('[role="status"]').text()).toBe('No books are available in this catalog page.')
+    expect(wrapper.find('#series-library').exists()).toBe(false)
+  })
+
   it('waits for destination and language initialization before allowing submission', async () => {
     let resolveLibraries!: () => void
     state.fetchLibraries.mockImplementation(
@@ -255,6 +303,32 @@ describe('series requests', () => {
     await flushPromises()
     const post = state.api.mock.calls.find(([path]) => path === '/api/v1/book-requests')!
     expect(JSON.parse(post[1]!.body as string)).toMatchObject({ targetLibraryId: 1, targetFolderId: 6, language: 'fr' })
+  })
+
+  it('sends the chosen format and clears an explicit destination and language', async () => {
+    const wrapper = await setup()
+    await wrapper.get('#series-library').setValue('1')
+    await wrapper.get('#series-folder').setValue('6')
+    await wrapper.get('#series-library').setValue('')
+    expect(wrapper.find('#series-folder').exists()).toBe(false)
+    await wrapper.get('#series-language').setValue('fr')
+    await wrapper.get('#series-language').setValue('')
+    await wrapper.get('#series-media').setValue('audiobook')
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Request all'))!
+      .trigger('click')
+    await flushPromises()
+
+    const post = state.api.mock.calls.find(([path]) => path === '/api/v1/book-requests')!
+    expect(JSON.parse(post[1]!.body as string)).toMatchObject({
+      mediaKind: 'audiobook',
+      targetLibraryId: null,
+      targetFolderId: null,
+      language: null,
+    })
   })
   it('rejects a non-advancing next offset', async () => {
     const wrapper = await setup()

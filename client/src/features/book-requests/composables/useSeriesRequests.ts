@@ -21,6 +21,9 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const { load: loadDestinations, defaultFor, resolveDestination } = useRequestDestinationDefault()
   const { load: loadLanguage, resolveLanguage } = useRequestLanguageDefault()
   const query = ref('')
+  const submittedQuery = ref('')
+  const searching = ref(false)
+  const hasSearched = ref(false)
   const results = ref<SeriesCatalogSeries[]>([])
   const searchOffset = ref<number | null>(null)
   const searchPageOffset = ref(0)
@@ -29,6 +32,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const annotations = ref<BookRequestAvailability[]>([])
   const pageOffset = ref(0)
   const nextOffset = ref<number | null>(null)
+  const previewLoaded = ref(false)
   const mediaKind = ref<BookRequestMediaKind>('ebook')
   const optionsReady = ref(false)
   const targetLibraryId = ref<number | null>(null)
@@ -55,16 +59,14 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   watch(targetLibraryId, () => {
     targetFolderId.value = folders.value[0]?.id ?? null
   })
-  function changeLibrary(event: Event) {
-    const value = (event.target as HTMLSelectElement).value
+  function changeLibrary(value: string | number) {
     targetLibraryId.value = value ? Number(value) : null
   }
-  function changeFolder(event: Event) {
-    const value = (event.target as HTMLSelectElement).value
+  function changeFolder(value: string | number) {
     targetFolderId.value = value ? Number(value) : null
   }
-  function changeLanguage(event: Event) {
-    language.value = (event.target as HTMLSelectElement).value || null
+  function changeLanguage(value: string | number) {
+    language.value = typeof value === 'string' && value ? value : null
   }
   const busy = ref(false)
   const running = ref(false)
@@ -98,20 +100,25 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   }
   async function searchAt(offset: number) {
     busy.value = true
+    searching.value = true
     error.value = ''
     try {
       const page = await readPage<SeriesCatalogSeries>(
-        `/api/v1/book-requests/series-catalog?q=${encodeURIComponent(query.value.trim())}&offset=${offset}`,
+        `/api/v1/book-requests/series-catalog?q=${encodeURIComponent(submittedQuery.value)}&offset=${offset}`,
         offset,
       )
       if (disposed) return
       results.value = page.items
+      hasSearched.value = true
       searchPageOffset.value = offset
       searchOffset.value = page.nextOffset
     } catch (e) {
       if (!disposed) error.value = e instanceof Error ? e.message : t('bookRequests.series.failed')
     } finally {
-      if (!disposed) busy.value = false
+      if (!disposed) {
+        busy.value = false
+        searching.value = false
+      }
     }
   }
   let appliedSeed = 0
@@ -124,11 +131,12 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   })
   function handleSearch() {
     if (busy.value || query.value.trim().length < 2) return
-    selected.value = null
+    clearSelection()
+    submittedQuery.value = query.value.trim()
+    hasSearched.value = false
     results.value = []
     searchOffset.value = null
     searchPageOffset.value = 0
-    progress.value = ''
     void searchAt(0)
   }
   function handlePreviousSearch() {
@@ -148,6 +156,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
       if (disposed) return
       books.value = page.items
       annotations.value = availability
+      previewLoaded.value = true
       pageOffset.value = offset
       nextOffset.value = page.nextOffset
     } catch (e) {
@@ -156,13 +165,19 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
       if (!disposed) busy.value = false
     }
   }
-  function selectSeries(series: SeriesCatalogSeries) {
-    selected.value = series
+  function clearSelection() {
+    selected.value = null
     books.value = []
     annotations.value = []
+    previewLoaded.value = false
     pageOffset.value = 0
     nextOffset.value = null
     progress.value = ''
+    error.value = ''
+  }
+  function selectSeries(series: SeriesCatalogSeries) {
+    clearSelection()
+    selected.value = series
     void loadPage(0)
   }
   function previousPage() {
@@ -304,11 +319,14 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     changeFolder,
     changeLanguage,
     query,
+    searching,
+    hasSearched,
     results,
     searchOffset,
     searchPageOffset,
     selected,
     books,
+    previewLoaded,
     pageOffset,
     nextOffset,
     mediaKind,
@@ -319,6 +337,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     handleMoreSearch,
     handlePreviousSearch,
     selectSeries,
+    clearSelection,
     previousPage,
     nextPage,
     requestAll,
