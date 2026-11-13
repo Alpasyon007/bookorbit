@@ -56,7 +56,7 @@ The required checks are:
 
 1. Frozen dependency installation using the Node version from `Dockerfile` and pnpm pin from `package.json`.
 2. Fork formatting, workflow validation and failure-path tests; application lint, type checks, unit tests, and client/server production builds.
-3. `book-api-contract` and `authorization-matrix` E2E suites, each using its own disposable PostgreSQL 18/pgvector service. Empty test selections fail.
+3. `book-api-contract`, `authorization-matrix` and `book-requests` E2E suites, each using its own disposable PostgreSQL 18/pgvector service. Empty test selections fail.
 4. Build the production image without publishing, then run its real entrypoint against a fresh disposable database. Verify migration/startup, initial setup, login/session, empty library browsing/search, app version, and built client assets.
 5. A final gate requires every job to report `success`. Failed, cancelled, skipped or missing checks block publication.
 
@@ -84,7 +84,7 @@ Before each custom release, add its user-facing highlights and full change descr
 
 The v3.8.0 authorization test inventory omits `POST /admin/download-clients/validate`. A separate compatibility patch adds `server/test/e2e/authorization-matrix/route-inventory/routes-fork.json` and registers it through the inventory manifest. It preserves the existing parity assertion and adds the route to the permission/API-key probes. On each upstream upgrade, check whether upstream now inventories the route; if so, drop the fork chunk and its manifest registration. Do not add it to the uncovered-route baseline or skip the failing test.
 
-For future product patches, keep implementation in a named feature/service/composable and use the owning module's exported interface. Prefer existing HTTP metadata providers or indexer plugins for source integrations. Keep upstream wiring changes small and identifiable; avoid copying whole upstream components or querying another module's database internals. Preserve shared types, ownership/permission checks and stable persisted IDs. Each patch needs its own acceptance tests and a ledger entry describing its injection points. Do not introduce a general plugin framework until an actual feature requires it.
+For the in-progress footer, Series Grid, cover sources and series requests, see [PATCH_PLAN.md](PATCH_PLAN.md) for exact helpers, hooks, dependencies and acceptance checks. Keep implementation in a named feature/service/composable and use the owning module's exported interface. Prefer existing HTTP metadata providers or indexer plugins for source integrations. Keep upstream wiring changes small and identifiable; avoid copying whole upstream components or querying another module's database internals. Preserve shared types, ownership/permission checks and stable persisted IDs. Each patch needs its own acceptance tests and a ledger entry describing its injection points. Do not introduce a general plugin framework until an actual feature requires it.
 
 Use Node >=24 and the pinned `pnpm@11.28.9`; upstream CI and Docker use Node 26. Run from the repository root:
 

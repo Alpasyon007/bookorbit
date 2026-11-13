@@ -1,123 +1,45 @@
 # Personal fork patch plan
 
-Baseline: upstream `v3.8.0` (`450c18e2`), published 11 November 2026. Working branch: `codex/custom-3.8`. Reviewed 12 November 2026.
+Base: upstream `v3.8.0` (`450c18e2`). Working patch queue: `codex/custom-3.8`. The released fork revision is `v3.8.0-custom.2`; the four product patches below are implemented in local commits; the `custom.3` notes are prepared and not published. They add no database migration or new dependency. Follow [FORK_WORKFLOW.md](FORK_WORKFLOW.md) for the release and upgrade gates.
 
-The source upgrade preserves the previous fork documentation and image workflow. Custom version handling and bundled What's New entries are implemented. The proposed product areas remain sidebar UI, additional metadata/cover sources, and richer requests such as requesting a book series. Exact layouts and source providers remain choices for those implementation tasks.
+## Patch boundaries
 
-## Recommended order
+| Patch               | Owned helpers and contract                                                                                                                                                                                                                                                                                          | Thin upstream hooks and behavior                                                                                                                                                                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sidebar footer      | `client/src/components/sidebar/__tests__/SidebarFooterBar.test.ts`                                                                                                                                                                                                                                                  | `AppSidebar.vue` and `SidebarFooterBar.vue` remove promotional controls while retaining version, update and What's New controls. Existing sidebar preferences and permissions remain in force.                                                                                                                                                                        |
+| Library Series Grid | `server/src/modules/book/series-grid-sql.ts`, `client/src/features/book/lib/series-grid-layout.ts`, `VirtualBookGridCell.vue`                                                                                                                                                                                       | Book query/assembly and shared book, query and display preferences add a library-only view. `HomeView.vue`, browse controls and the virtual grid render bounded server windows grouped by canonical primary series, with a legacy fallback and No Series last. Filters and within-series sorting apply; a group can continue across windows.                          |
+| Cover sources       | `server/src/modules/cover/providers/indexed-cover-sources.ts`, `remote-cover-url.ts`, `server/src/modules/metadata-fetch/metadata-cover-search.service.ts`, `client/src/features/book/composables/useCoverSearchSources.ts`                                                                                         | The existing cover controller, registry, DTO, drawer and preferences expose source-labelled Hachette UK, Waterstones and Foyles index results and enabled compatible metadata providers. The indexed sources depend on external search results, not a complete retailer catalog. Existing cover proxy and permissions still apply.                                    |
+| Series requests     | `server/src/modules/metadata-fetch/series-catalog.service.ts`, `server/src/modules/book-request/series-catalog.controller.ts` and `dto/series-catalog.dto.ts`, `packages/types/src/series-catalog.ts`, `client/src/features/book-requests/composables/useSeriesRequests.ts` and `components/SeriesRequestPanel.vue` | Metadata and request modules register the adapter and routes; a narrow auth hook invalidates request defaults on user changes. Requests search can pass a series name, including one from Goodreads metadata, to the Hardcover search. Hardcover must be enabled and configured with a catalog-capable token. Preview uses bounded pages and per-medium availability. |
 
-| Stage | Deliverable                                                       | Likely core impact                             | Completion check                                                   |
-| ----- | ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
-| 0     | Reliable fork checks and a tested custom image                    | Fork-only workflows                            | Checks gate publishing; image boots with a test database           |
-| 1     | One specific sidebar improvement                                  | Small Vue component/composable patch           | Desktop, mobile, keyboard, permissions and saved settings work     |
-| 2     | One additional metadata/cover source                              | Prefer an external HTTP service; no core patch | Search, lookup and cover candidates work through existing settings |
-| 3     | Extra sources in the dedicated cover drawer, if needed            | Focused cover integration patch                | API, DTO, preferences and UI agree on available providers          |
-| 4     | Preview a series and request selected missing books               | Requests UI and bounded server orchestration   | Real catalogue entries, dedupe, limits and partial retries work    |
-| 5     | Persistent series tracking or future-volume monitoring, if wanted | Separate schema and worker patch               | Restart recovery, idempotency and scoped progress are verified     |
+The catalog uses actual Hardcover series members and stable work slugs, not inferred library gaps. Request all walks every page and uses ordinary per-book availability and submission routes. It skips owned books and existing subscriptions, joins existing requests and reports created, joined, skipped and unknown-date counts. It excludes compilations, future books and books with unknown release dates; fractional positions remain visible and are omitted from the legacy integer request field. Requesters can select a destination library, folder and language; instance defaults and ordinary approval/permission rules apply. The operation runs in the browser, so keep the panel open and retry after interruption or a failure. Retry rechecks availability and uses existing deduplication; there is no durable series job, future-volume monitoring, or guarantee against catalog edits while pages are being read. Provider errors and incomplete processing are shown rather than treated as completion. The Hardcover GraphQL schema and row limits are documented in its [schema](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/schema.graphql) and [row limits](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/row-limits.json). Live authenticated catalog verification remains required on a configured test instance.
 
-Keep one concern per commit and one feature per branch. Do not mix sidebar changes, provider integration and request orchestration in the same patch. Record each retained patch's purpose, tests and migration impact in the ledger below. Follow [FORK_WORKFLOW.md](FORK_WORKFLOW.md) for upgrades and image versions.
+## Port and verification
 
-## 0. Build and verification foundation
+Keep these four concerns independently reviewable and port them after the existing fork foundation and custom-version/release-notes adapters. The series request adapter depends on the existing Hardcover provider configuration and request lifecycle. The cover adapter depends on the metadata provider registry, HTTP-provider catalog, cover search and shared source contract. The Series Grid depends on book query windows, view preferences and the virtual grid. Review each upstream hook for changed signatures and behavior before replaying it.
 
-The Custom Image workflow publishes an amd64 app image on explicit custom tags such as `v3.8.0-custom.1`. The build foundation is implemented in fork-owned workflows, a thin setup action and `scripts/fork/`. A separate runtime compatibility patch preserves upstream update checks and release-note filtering for these labels. See the [automated gate and portability boundaries](FORK_WORKFLOW.md#automated-publishing-gate).
+1. Start a new patch branch at the next verified upstream stable tag. Replay the retained fork commits individually with `git cherry-pick -x`; omit any feature implemented upstream. Do not rewrite migration history. These patches require no migration.
+2. Resolve each hook against the new source, keeping fork helpers separate and changes to upstream files narrow. Recheck permissions, DTOs, response shapes, pagination, saved preferences and both desktop and mobile controls.
+3. Run the targeted tests for each touched feature, then the complete fork checks in [FORK_WORKFLOW.md](FORK_WORKFLOW.md). Cover `authorization-matrix` and `book-requests` E2E on disposable databases, as well as a fresh install and restored previous-release database when validating an upgrade. Use a configured test Hardcover account for a real preview and interrupted retry; do not use production data for destructive checks.
+4. Test retailer/metadata cover searches with representative results and provider failures; external results and availability can change. Confirm Series Grid stays bounded and virtualized on a large library, preserves filters and sorting across windows, and keeps view settings per user.
+5. Update the ledger and bundled release notes to match actual merged changes and the new version. Run the exact-tag verification gate before publishing. Never move a published tag or assume the prepared `custom.3` entry means a release exists.
 
-Implemented checks:
+Focused checks used during implementation include `pnpm --dir server exec vitest run src/modules/metadata-fetch/series-catalog.service.test.ts`, `pnpm --dir client exec vitest run src/features/book-requests/__tests__/SeriesRequestPanel.spec.ts src/features/book-requests/__tests__/useSeriesRequests.spec.ts`, and `pnpm --dir server exec vitest run src/modules/release-notes/custom-releases/custom-releases.test.ts`. The full test and E2E gate must still pass before release.
 
-1. The reusable `Fork Checks` workflow runs on patch branch pushes/PRs and on the exact release-tag commit before publication.
-2. Dependencies use the checked-out release's pinned versions and frozen lockfile. Checks run `pnpm run verify`, production builds, fork safety tests and workflow validation.
-3. Database E2E checks cover the book API contract and authorization matrix. The built container is smoke-tested against its own disposable database, including migration, setup, login, browsing and client assets.
-4. The final gate rejects failed, cancelled, skipped or missing checks. Publishing loads the saved tested image and verifies its identity before receiving registry credentials; it never rebuilds the image.
+## Verification reported for the working tree
 
-Before deployment, confirm the host supports the current amd64 build and test the upgrade on a restored copy of the previous database. Add a native arm64 build only when needed. Build the optional read-aloud worker separately only when changing it; otherwise pin its upstream release image. Add feature-specific E2E suites alongside each future product patch.
+- Sidebar and Series Grid: 152 client tests and 667 server tests passed in the reported focused runs. The Series Grid book API contract also passed against a disposable PostgreSQL database, including grouped queries. The client run covered the footer, mobile view controls, virtual grid, window handling and large-library layout.
+- Cover sources: 377 server tests and 57 client tests passed in the reported focused runs. Authenticated application searches and proxied images were checked for Hachette UK, Waterstones, Foyles and Open Library. External index coverage and rate limits can change. Server command: `pnpm --dir server exec vitest run src/modules/cover src/modules/metadata-fetch/metadata-cover-search.service.test.ts src/modules/metadata-fetch/metadata-fetch.service.test.ts src/modules/user-preferences/user-preferences.service.test.ts`. Client command: `pnpm --dir client exec vitest run src/features/book/components/detail/tabs/CoverSearchDrawer.test.ts src/features/book/components/detail/tabs/CoverEditorPanel.spec.ts`; these two suites contain the 57 tests.
+- Series requests: 9 server catalog tests and 11 client tests passed, including 60-book paging, partial retry, duplicate handling, destination selection and interruption. The release catalog passed 19 tests. A live authenticated Hardcover series catalog test remains outstanding.
+- The disposable PostgreSQL book-requests lifecycle E2E suite passed 51 tests. The authorization matrix passed 45 of 47 tests, including exact 691-route inventory parity and the new series permissions. On native Windows, a POSIX `chmod` deletion-failure assertion returned 204 instead of 500, and a default-password-change test exceeded its 5-second timeout. The broader native Windows API suite also encountered POSIX fixture and `chmod` failures. The complete Linux gate remains authoritative; inspect the [Fork Checks runs](https://github.com/Alpasyon007/bookorbit/actions/workflows/fork-checks.yml) for its current result.
 
-Current package pin is `pnpm@11.28.9`, minimum Node is 24, and upstream CI/Docker use Node 26. The repository instructions contain some older tooling descriptions; use the checked-in manifests for installation. E2E commands and supported suites live in `scripts/e2e/suite-registry.mjs`.
+## Ledger
 
-## 1. Sidebar UI
+| Patch                                         | Status                             | Schema | Upstream status                                  |
+| --------------------------------------------- | ---------------------------------- | ------ | ------------------------------------------------ |
+| Fork checks, custom version and bundled notes | Released through `v3.8.0-custom.2` | None   | Fork-specific adapters                           |
+| Sidebar footer                                | Implemented `cb47d785`             | None   | Reassess on next upstream release                |
+| Library Series Grid                           | Implemented `8e416fcb`             | None   | Reassess on next upstream release                |
+| Cover sources                                 | Implemented `686a5c85`             | None   | Reassess supported sources and provider contract |
+| Series requests                               | Implemented `e25f9181`             | None   | Reassess upstream series catalog and requests    |
 
-First try existing customization: hide/show entries and groups, reorder groups and rows within a group, collapse sections, and change list caps. Preferences already persist per user. Search/Dashboard and the primary group have deliberate restrictions; pending-work badges can reveal hidden Requests/Book Dock entries.
-
-For a visual change, start with the smallest component in `client/src/components/sidebar/`, such as `SidebarNavItem.vue`, `SidebarEntitySection.vue`, `SidebarSectionHeader.vue` or `SidebarFooterBar.vue`. Keep `AppSidebar.vue` focused on orchestration.
-
-For navigation changes, use `client/src/composables/useSidebarNav.ts`, `useSidebarLayout.ts` and `useSidebarPrefs.ts`. Preserve entry IDs, permission filtering and stale preference handling. Only expand `packages/types/src/sidebar.ts` if existing layout options cannot express the requirement, for example custom labels or user-created groups.
-
-Existing persistence is `PATCH /api/v1/users/me/settings` with `{ settings: { sidebarConfig, sidebarLayout } }`, validated by `server/src/modules/user/dto/update-me-settings.dto.ts`. Extending the existing JSON settings should usually avoid a database migration; still validate every new field at the API boundary.
-
-Acceptance: a saved layout survives reload and an upstream upgrade, another user retains their own layout, restricted routes stay hidden, and desktop rail/mobile sheet/keyboard navigation/reset all work. Target the existing sidebar composable and component tests. This is a good first product patch once the desired layout is specified.
-
-## 2. Metadata and cover sources
-
-Use the existing external HTTP provider support before adding source-specific code to BookOrbit. Providers can run as separately versioned services and register through Settings. This avoids replaying their implementation at every upstream upgrade.
-
-The implemented contract is in `packages/types/src/metadata-http-provider.ts` and `server/src/modules/metadata-http-provider/`:
-
-- `GET /provider/info` advertises a stable key, media types, fields, lookup support and rate limits.
-- `GET /search?query=...&author=...&mediaType=...` returns `{ matches: [...] }`.
-- Optional `GET /book/{id}` returns a full candidate.
-- Candidates require a stable provider ID and title. Cover candidates can include image dimensions; a cover-focused service can advertise `supportedFields: ["cover"]`.
-
-Register through `POST /api/v1/metadata-http-providers` with `{ baseUrl, authorization?, allowPrivateAddress?, timeoutMs? }`. The existing UI and `ManageMetadataConfig` permission cover registration, testing and updates. Local Compose services need the existing explicit private-address setting. Keep credentials in provider configuration rather than source control.
-
-For each desired source: check the built-in providers and directory, choose the supported API, implement bounded queries with caching/timeouts/rate limits, test representative mapping fixtures, register it, then verify interactive metadata and cover candidates. Enable automatic field rules deliberately after previewing results. Source selection is still open; no new provider account or service has been configured.
-
-Relevant wiring: `server/src/modules/metadata-fetch/providers/http/http-metadata-provider.ts`, `provider-registry.ts`, and `client/src/features/settings/metadata-preferences/`. Validate with provider unit tests and the `metadata-http-providers` E2E suite; add `metadata-cache` or `metadata-lock` checks if those behaviours change.
-
-### Dedicated cover search needs separate integration
-
-`CoverSearchDrawer.vue` uses `GET /api/v1/books/cover/search` and a separate provider registry. An external metadata provider does not automatically become a source in that drawer.
-
-If that is the desired experience, make a small additional patch in `server/src/modules/cover/`, its `providers/cover-provider.ts`, registry/module, `dto/search-covers-query.dto.ts`, and the drawer at `client/src/features/book/components/detail/tabs/CoverSearchDrawer.vue`. Include `packages/types/src/cover-search-preferences.ts` and server preference validation if persisting a new default.
-
-Prefer an adapter using exported metadata services so source clients are not duplicated. Preserve the shared response contract, proxy/download protections, metadata-edit permission, source deduplication and ebook/audiobook filtering. Test the cover controller/service/DTO and drawer together.
-
-`packages/plugin-api/` is a different extension point: disk-loaded acquisition indexers for finding downloadable releases. It is not the metadata/cover provider API.
-
-## 3. Requesting a series
-
-Reuse the existing per-book request lifecycle. It already handles duplicates, subscriptions, approval, destinations, ebook/audiobook pairs, retries and progress. Build series selection/orchestration around it rather than creating a second download pipeline.
-
-### A. Discover and preview the catalogue
-
-The current Series API lists accessible library books and inferred gap positions. It does not supply the titles of missing external books. Its list summaries are deliberately capped. The metadata provider interface currently searches/looks up individual books rather than enumerating a whole series.
-
-Add a paginated series search/member capability for one chosen source first. Return stable source series/work IDs, title/author, the original series position, release status and pagination/completeness information. Do not turn gap numbers into invented book requests. A partial catalogue must be labelled as partial.
-
-Implement behind the owning metadata feature's exported service/interface, then expose a validated, permission-checked preview route and shared response types. Cache responses and bound provider concurrency. Novel/novella ordering needs care: existing request `seriesIndex` is integer-only and submission currently truncates fractional positions. Preserve `1.5` in catalogue display/identity; initially omit the legacy numeric field for noninteger values, or make a separate tested schema change.
-
-### B. Select and submit an initial batch
-
-Add a picker in `client/src/features/book-requests/` and optionally a Requests action on a series page. Show owned books, existing requests, main volumes and optional novellas. Let the user choose media, language, destination and the exact books to request.
-
-Reuse existing availability checks, capped at 50 items per call. Default to missing books and keep large lists paginated or virtualized. Respect the current limit of 10 live self-serve requests and report capacity before submission; server enforcement remains authoritative.
-
-Add bounded orchestration around `server/src/modules/book-request/book-request.service.ts`, with validated DTOs and shared types in `packages/types/`. Call the existing creation/dedupe services for each selected work. Return per-item `created`, `joined`, `skipped` or `failed` outcomes, with useful reasons. Retry failed items only. Preserve the existing cross-user active-request deduplication/subscription model while checking each caller's permissions and visibility.
-
-An initial capped selection can avoid schema changes: submitted books appear as ordinary requests and existing automation handles fulfillment. This version does not promise durable series-level grouping or automatic future-volume tracking. Do not start an unbounded indexer search for every catalogue entry.
-
-### C. Add persistent tracking only when needed
-
-For restartable large submissions, an aggregate series progress page or future releases, introduce user-owned series-request/job and item records in a separate patch. Generate migrations with Drizzle. Use a caller-scoped idempotency key, stable work/media identity, indexed pending-state queries and bounded workers. Resume unfinished items and route progress only to the owner or authorized managers. Reuse existing per-book request IDs and retry/backoff machinery.
-
-Acceptance tests must cover duplicate clicks/concurrent submissions, two users requesting the same book, already-owned media, existing subscriptions, missing/fractional volumes, incomplete catalogues, permissions, request limits, partial failures and retries. Use existing request service/dedupe/gateway tests, frontend submission tests, and `book-requests` plus `authorization-matrix` E2E suites. If a durable worker is added, include restart recovery and a large synthetic catalogue.
-
-## Patch ledger
-
-| Patch                                | Status                                                       | Migration           | Verification                                                                     |
-| ------------------------------------ | ------------------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------- |
-| Fork workflow documentation          | Carried from `c837937b`; updated for v3.8.0                  | None                | Documentation and Git ancestry                                                   |
-| Custom Image workflow                | Carried from `ca689ba6`; now publishes the verified artifact | None                | Reusable checks gate publication; an explicit release tag is required            |
-| Fork checks and publish gate         | Implemented in fork-owned workflows/action/scripts           | None                | Failure-path tests, E2E, builds and container smoke checks gate the exact commit |
-| Sidebar improvement                  | Planned; exact UI change to choose                           | Probably none       | Sidebar component/composable tests and responsive review                         |
-| Additional metadata provider         | Planned; source to choose                                    | None in BookOrbit   | Provider contract fixtures and integration tests                                 |
-| Cover drawer provider integration    | Optional follow-up                                           | Probably none       | Cover API/DTO/preferences/UI tests                                               |
-| Series preview and selected requests | Planned; catalogue source to choose                          | None for capped MVP | Request and authorization tests                                                  |
-| Durable series tracking              | Optional later feature                                       | Yes                 | Migration/restore/restart tests                                                  |
-
-For each implemented product patch, record its commit, acceptance example, exact test command and upstream status. At every release upgrade, keep, replace or retire each patch explicitly. Never regenerate a custom migration that has already run against a real database.
-
-Version-label patch: `upstream-version.utils.ts` is the shared server adapter, injected into app-info and release-notes. The sidebar's `versionUi.ts` also recognizes custom versions for update indicators. The patch displays the complete custom label while comparing against upstream `v3.8.0`, and needs no migration. Its utility tests and separate fork-version tests cover same-base, newer-base, malformed labels, release-note caps and update indicators. Port it independently of the CI foundation.
-
-Custom release-note patch: the server's `release-notes/custom-releases/` catalog and helper add descriptions of our revisions to the existing API. A small client comparator hook makes custom revision upgrades visible through the existing per-user unread/popup flow. Notes are bundled, available without GitHub access, capped at the installed custom version and paginated alongside upstream notes. Add a catalog entry for every new custom tag. Regression tests cover API filtering/paging/offline behavior and client acknowledgement/user switching; container smoke checks require meaningful notes for the tagged image. No shared contract or database migration changes are needed.
-
-Latest-image alias: the publishing helper promotes `latest` only after the same image passes all checks and its versioned push is verified. Serialized promotion compares numeric custom versions, retains a newer alias, rejects equal-version identity changes and verifies the registry digest. The workflow and helper tests can be ported independently of the runtime release-note patch.
-
-Compatibility patch: v3.8.0's authorization inventory misses `POST /admin/download-clients/validate`. The fork-owned `routes-fork.json` chunk and small manifest registration add this existing route to the `ManageAppSettings` and write-API-key checks. Validate with `pnpm run e2e:run -- authorization-matrix --passWithNoTests=false`. This changes test metadata only, has no migration, and should be dropped when upstream inventories the route.
+Record any upstream replacement here at the next upgrade. The `custom.3` catalog entry is prepared, not published.

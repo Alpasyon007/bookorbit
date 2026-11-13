@@ -2,6 +2,40 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.3',
+    name: 'Custom revision 3: series, covers and navigation',
+    date: '2026-11-13',
+    highlights: [
+      {
+        icon: 'Library',
+        title: 'Browse books by series',
+        body: 'The library Series Grid groups books under series headings while preserving filters and your chosen sort within each series.',
+        media: [],
+      },
+      {
+        icon: 'BookPlus',
+        title: 'Request released series books',
+        body: 'Search a configured Hardcover catalog, preview availability and request released volumes across its pages. Series names found in book metadata, including Goodreads, can seed the search. Keep the panel open during submission and retry if interrupted.',
+        media: [],
+      },
+      {
+        icon: 'Image',
+        title: 'More cover choices',
+        body: 'The cover search drawer adds source-labelled Hachette UK, Waterstones and Foyles results via DuckDuckGo, plus compatible enabled metadata providers. Coverage varies by source.',
+        media: [],
+      },
+      {
+        icon: 'PanelLeft',
+        title: 'A simpler sidebar footer',
+        body: "Promotional controls have been removed from the footer. Version information, update indicators and What's New remain available.",
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.3',
+    changelogBody:
+      '### Custom changes\n\n- Add a paginated Series Grid mode to the library.\n- Preview and request released Hardcover series books through the existing request workflow. Hardcover must be enabled and configured. Missing release dates, future books and compilations are excluded; retry an interrupted run while the panel is open.\n- Extend source-labelled cover search with supported bookshops and enabled metadata providers.\n- Simplify the sidebar footer while retaining version and update controls.\n\nBased on upstream v3.8.0. These changes add no database migrations.',
+  },
+  {
     version: 'v3.8.0-custom.2',
     name: 'Custom revision 2: release notes and automatic image updates',
     date: '2026-11-13',
