@@ -2,6 +2,22 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.7',
+    name: 'Custom revision 7: continuous Series Grid rows',
+    date: '2026-11-13',
+    highlights: [
+      {
+        icon: 'LayoutGrid',
+        title: 'Series stay together as the grid loads',
+        body: 'Books in the same series now stay under one heading as more books load, and fill the available space in each row.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.7',
+    changelogBody:
+      '### Custom changes\n\n- Keep matching Series Grid paths under one heading as adjacent pages load. Fill partial rows across page boundaries when the current column count allows it.\n\nBased on upstream v3.8.0. This change adds no database migration.',
+  },
+  {
     version: 'v3.8.0-custom.6',
     name: 'Custom revision 6: standalone books within series',
     date: '2026-11-13',

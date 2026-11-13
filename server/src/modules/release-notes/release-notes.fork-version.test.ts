@@ -84,28 +84,34 @@ describe('ReleaseNotesService fork versions', () => {
     expect((await service.getSince('v3.8.0-custom.6')).releases).toEqual([]);
   });
 
+  it('shows only custom.7 when updating from custom.6', async () => {
+    const service = await createService('v3.8.0-custom.7', ['v3.8.1', 'v3.8.0']);
+    expect((await service.getSince('v3.8.0-custom.6')).releases.map((release) => release.version)).toEqual(['v3.8.0-custom.7']);
+    expect((await service.getSince('v3.8.0-custom.7')).releases).toEqual([]);
+  });
+
   it.each(['v3.8.0-custom.1', 'v3.8.0.1'])('advances from saved baseline %s while excluding future releases', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.10.0', 'v3.9.0', 'v3.8.1', 'v3.8.0']);
     expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.7',
       'v3.8.0-custom.6',
       'v3.8.0-custom.5',
       'v3.8.0-custom.4',
-      'v3.8.0-custom.3',
     ]);
-    expect((await service.getSince('v3.8.0-custom.3')).releases.map((release) => release.version)).toEqual([
+    expect((await service.getSince('v3.8.0-custom.4')).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.7',
       'v3.8.0-custom.6',
       'v3.8.0-custom.5',
-      'v3.8.0-custom.4',
       'v3.9.0',
     ]);
   });
 
-  it.each([null, 'v3.8.0-custom.3'])('rejects malformed release candidates and legacy four-part upstream tags with baseline %s', async (since) => {
+  it.each([null, 'v3.8.0-custom.4'])('rejects malformed release candidates and legacy four-part upstream tags with baseline %s', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.9.0-custom.0', 'v3.9.0junk', 'v3.8.0.2', 'v3.8.1']);
     expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(
       since
-        ? ['v3.8.0-custom.6', 'v3.8.0-custom.5', 'v3.8.0-custom.4', 'v3.8.1']
-        : ['v3.8.0-custom.6', 'v3.8.0-custom.5', 'v3.8.0-custom.4', 'v3.8.0-custom.3'],
+        ? ['v3.8.0-custom.7', 'v3.8.0-custom.6', 'v3.8.0-custom.5', 'v3.8.1']
+        : ['v3.8.0-custom.7', 'v3.8.0-custom.6', 'v3.8.0-custom.5', 'v3.8.0-custom.4'],
     );
   });
 });
