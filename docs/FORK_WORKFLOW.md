@@ -11,7 +11,7 @@ This fork tracks upstream (`bookorbit/bookorbit`) stable releases and carries a 
 | `custom/3.6`       | Previous patch queue, preserved for reference.                                                                                        |
 | feature branch     | One patch, based on the current patch queue. Use `BO-<issue>-<description>` when linked to an issue, otherwise `codex/<description>`. |
 
-The current stable base is `v3.8.0` (`450c18e2`), published on 11 November 2026. The previous fork changes were replayed with `cherry-pick -x`; upstream migration history still matches the tag. Runtime changes are limited to the custom-version compatibility patch described below. See [PATCH_PLAN.md](PATCH_PLAN.md) for the proposed sidebar, provider, and series-request work.
+The current stable base is `v3.8.0` (`450c18e2`), published on 11 November 2026. The previous fork changes were replayed with `cherry-pick -x`; upstream migration history still matches the tag. The released fork includes the sidebar, Series Grid, cover-source and series-request patches. See [PATCH_PLAN.md](PATCH_PLAN.md) for their boundaries and subsequent fixes.
 
 `upstream/main` can contain unreleased changes. Updating its mirror must not change the base of the patch queue. This checkout's `main` and `origin/main` still point at the previous `99aa7dce` snapshot; advancing them is separate from updating the stable patch branch.
 

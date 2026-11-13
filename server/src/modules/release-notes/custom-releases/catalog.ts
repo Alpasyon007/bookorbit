@@ -2,6 +2,34 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.4',
+    name: 'Custom revision 4: series search and browsing fixes',
+    date: '2026-11-13',
+    highlights: [
+      {
+        icon: 'Search',
+        title: 'Series search works with Hardcover',
+        body: "Series discovery now uses Hardcover's supported search. Configure Hardcover under Settings > Metadata > Providers, then preview the series and request its released books.",
+        media: [],
+      },
+      {
+        icon: 'KeyRound',
+        title: 'Catalog-only tokens are accepted',
+        body: 'The metadata provider connection test checks catalog access rather than account identity, so a catalog-only Hardcover token can be used. Personal Hardcover Sync keeps its own account connection.',
+        media: [],
+      },
+      {
+        icon: 'LayoutGrid',
+        title: 'Clearer series browsing',
+        body: "Series requests now use the app's shared themed controls and responsive layout, with clearer loading, empty and error states. Books without a series appear under Standalone in Series Grid.",
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.4',
+    changelogBody:
+      '### Custom changes\n\n- Use Hardcover indexed search for series discovery instead of a filter blocked by its API gateway.\n- Validate the Hardcover metadata provider with read-only catalog operations, allowing catalog-only tokens without changing personal Sync.\n- Use responsive themed controls in the series request picker and label ungrouped Series Grid books Standalone.\n\nBased on upstream v3.8.0. These changes add no database migrations.',
+  },
+  {
     version: 'v3.8.0-custom.3',
     name: 'Custom revision 3: series, covers and navigation',
     date: '2026-11-13',

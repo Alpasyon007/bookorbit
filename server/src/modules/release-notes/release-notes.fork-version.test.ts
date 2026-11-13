@@ -66,20 +66,29 @@ describe('ReleaseNotesService fork versions', () => {
     expect((await service.getSince('v3.8.0-custom.3')).releases).toEqual([]);
   });
 
+  it('includes custom.4 only when installed and newer than the saved revision', async () => {
+    const service = await createService('v3.8.0-custom.4', ['v3.8.1', 'v3.8.0']);
+    expect((await service.getSince('v3.8.0-custom.3')).releases.map((release) => release.version)).toEqual(['v3.8.0-custom.4']);
+    expect((await service.getSince('v3.8.0-custom.4')).releases).toEqual([]);
+  });
+
   it.each(['v3.8.0-custom.1', 'v3.8.0.1'])('advances from saved baseline %s while excluding future releases', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.10.0', 'v3.9.0', 'v3.8.1', 'v3.8.0']);
     expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.4',
       'v3.8.0-custom.3',
       'v3.8.0-custom.2',
       'v3.9.0',
-      'v3.8.1',
     ]);
+    expect((await service.getSince('v3.8.0-custom.3')).releases.map((release) => release.version)).toEqual(['v3.8.0-custom.4', 'v3.9.0', 'v3.8.1']);
   });
 
   it.each([null, 'v3.8.0-custom.1'])('rejects malformed release candidates and legacy four-part upstream tags with baseline %s', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.9.0-custom.0', 'v3.9.0junk', 'v3.8.0.2', 'v3.8.1']);
     expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(
-      since ? ['v3.8.0-custom.3', 'v3.8.0-custom.2', 'v3.8.1'] : ['v3.8.0-custom.3', 'v3.8.0-custom.2', 'v3.8.0-custom.1', 'v3.8.1'],
+      since
+        ? ['v3.8.0-custom.4', 'v3.8.0-custom.3', 'v3.8.0-custom.2', 'v3.8.1']
+        : ['v3.8.0-custom.4', 'v3.8.0-custom.3', 'v3.8.0-custom.2', 'v3.8.0-custom.1'],
     );
   });
 });
