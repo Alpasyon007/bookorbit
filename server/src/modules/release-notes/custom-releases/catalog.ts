@@ -2,6 +2,22 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.6',
+    name: 'Custom revision 6: standalone books within series',
+    date: '2026-11-13',
+    highlights: [
+      {
+        icon: 'LayoutGrid',
+        title: 'Standalone books within a series',
+        body: 'When a series has visible subseries, books that belong directly to that series now appear under a Standalone heading after its subseries. This also works at deeper levels. Books with no series remain under the main Standalone heading.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.6',
+    changelogBody:
+      '### Custom changes\n\n- Put books that belong directly to a parent series under a local Standalone heading after its visible subseries. Apply the current sort within each group.\n- Keep headings consistent across pages and use the normal series heading when filters leave no visible subseries.\n\nBased on upstream v3.8.0. This change adds no database migration.',
+  },
+  {
     version: 'v3.8.0-custom.5',
     name: 'Custom revision 5: series selections and nested browsing',
     date: '2026-11-13',
