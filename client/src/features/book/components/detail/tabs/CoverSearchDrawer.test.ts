@@ -118,14 +118,15 @@ describe('CoverSearchDrawer', () => {
 
   describe('default provider preference', () => {
     it('falls back when a saved source is disabled without changing the saved preference', async () => {
-      coverSearchPreferenceMock.defaultProvider.value = 'foyles'
+      coverSearchPreferenceMock.defaultProvider.value = 'metadata:foyles'
+      sourcesMock.sources.value = [...sourcesMock.builtin, { key: 'metadata:foyles', label: 'Foyles', media: ['ebook'] }]
       const wrapper = mountDrawer()
       await flushPromises()
-      expect(wrapper.get('select').element.value).toBe('foyles')
-      sourcesMock.sources.value = sourcesMock.builtin.filter(({ key }) => key !== 'foyles')
+      expect(wrapper.get('select').element.value).toBe('metadata:foyles')
+      sourcesMock.sources.value = sourcesMock.builtin
       await flushPromises()
       expect(wrapper.get('select').element.value).toBe('duckduckgo')
-      expect(coverSearchPreferenceMock.defaultProvider.value).toBe('foyles')
+      expect(coverSearchPreferenceMock.defaultProvider.value).toBe('metadata:foyles')
       wrapper.unmount()
     })
 
@@ -196,11 +197,12 @@ describe('CoverSearchDrawer', () => {
       const wrapper = mountDrawer()
       await flushPromises()
       expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('metadata:openLibrary')
-      expect(wrapper.text()).toContain('Hachette UK (via DuckDuckGo)')
+      expect(wrapper.get('option[value="metadata:openLibrary"]').text()).toBe('Open Library')
+      expect(wrapper.find('option[value="hachette-uk"]').exists()).toBe(false)
 
       await wrapper.get('input[type="checkbox"]').trigger('change')
       expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('duckduckgo')
-      expect(wrapper.text()).not.toContain('Hachette UK (via DuckDuckGo)')
+      expect(wrapper.find('option[value="metadata:openLibrary"]').exists()).toBe(false)
     })
   })
 
@@ -470,14 +472,15 @@ describe('CoverSearchDrawer', () => {
     })
 
     it('shows a provider failure next to available cover results', async () => {
+      sourcesMock.sources.value = [...sourcesMock.builtin, { key: 'metadata:foyles', label: 'Foyles', media: ['ebook'] }]
       const response = new Response(JSON.stringify([makeCoverResult('https://img/a')]), {
-        headers: { [COVER_SEARCH_FAILED_SOURCES_HEADER]: 'foyles' },
+        headers: { [COVER_SEARCH_FAILED_SOURCES_HEADER]: 'metadata:foyles' },
       })
       vi.stubGlobal('fetch', () => Promise.resolve(response))
       const wrapper = mountDrawer()
       await (wrapper.vm as unknown as DrawerVm).performSearch()
 
-      expect(wrapper.get('[role="status"]').text()).toContain('Foyles (via DuckDuckGo)')
+      expect(wrapper.get('[role="status"]').text()).toContain('Foyles')
       expect(wrapper.get('img').attributes('src')).toBe('https://img/a?thumb')
     })
 

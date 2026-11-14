@@ -33,9 +33,6 @@ const sidebarControlsDisabled = computed(() => saving.value || !policy.value.sid
 const requestControlsDisabled = computed(
   () => saving.value || !policy.value.seriesRequestsEnabled || !canUseRequests.value || !draft.value.seriesRequests.enabled,
 )
-const coverControlsDisabled = computed(
-  () => saving.value || !policy.value.extendedCoverSearchEnabled || !canEditCovers.value || !draft.value.coverSearch.enabled,
-)
 
 function choices<Value extends string>(values: readonly Value[], prefix: string) {
   return values.map((value) => ({ value, label: t(`${prefix}.${value}`) }))
@@ -61,18 +58,6 @@ const selectionOptions = computed(() =>
   choices<CustomPatchPreferences['seriesRequests']['initialSelection']>(['eligible', 'none'], 'settings.customPatches.requests.selectionOptions'),
 )
 const hierarchyExample = computed(() => t(`settings.customPatches.grid.hierarchyExamples.${draft.value.seriesGrid.hierarchyOrder}`))
-const retailers = [
-  { id: 'hachette-uk', label: 'Hachette UK' },
-  { id: 'waterstones', label: 'Waterstones' },
-  { id: 'foyles', label: 'Foyles' },
-] as const
-
-function handleRetailerChange(id: (typeof retailers)[number]['id'], enabled: boolean) {
-  const selected = new Set(draft.value.coverSearch.retailerSources)
-  if (enabled) selected.add(id)
-  else selected.delete(id)
-  draft.value.coverSearch.retailerSources = retailers.map((entry) => entry.id).filter((key) => selected.has(key))
-}
 
 function handleRetry() {
   return load()
@@ -237,7 +222,7 @@ function handleRetry() {
 
     <section v-if="canEditCovers" aria-labelledby="custom-patches-covers-title">
       <h3 id="custom-patches-covers-title" class="settings-group-label">{{ t('settings.customPatches.covers.title') }}</h3>
-      <p v-if="!policy.extendedCoverSearchEnabled" class="settings-hint mb-2">{{ t('settings.customPatches.policyDisabled') }}</p>
+      <p v-if="!policy.extendedCoverSearchEnabled" class="settings-hint mb-2">{{ t('settings.customPatches.covers.policyDisabled') }}</p>
       <div class="settings-card">
         <PatchToggle
           v-model="draft.coverSearch.enabled"
@@ -245,27 +230,14 @@ function handleRetry() {
           :hint="t('settings.customPatches.covers.enabledHint')"
           :disabled="saving || !policy.extendedCoverSearchEnabled"
         />
-        <PatchToggle
-          v-for="retailer in retailers"
-          :key="retailer.id"
-          :model-value="draft.coverSearch.retailerSources.includes(retailer.id)"
-          :label="retailer.label"
-          :disabled="coverControlsDisabled"
-          @update:model-value="handleRetailerChange(retailer.id, $event)"
-        />
-        <PatchToggle
-          v-model="draft.coverSearch.metadataSourcesEnabled"
-          :label="t('settings.customPatches.covers.metadata')"
-          :hint="t('settings.customPatches.covers.metadataHint')"
-          :disabled="coverControlsDisabled"
-        />
         <div class="settings-row flex-wrap">
+          <p class="settings-hint w-full">{{ t('settings.customPatches.covers.externalHint') }}</p>
           <RouterLink :to="{ name: 'settings-appearance-book-covers' }" class="text-sm text-primary underline underline-offset-2">{{
             t('settings.customPatches.covers.defaultSourceLink')
           }}</RouterLink>
           <RouterLink
             v-if="canManageProviders"
-            :to="{ name: 'settings-metadata-providers' }"
+            :to="{ name: 'settings-metadata-providers', query: { tab: 'external' } }"
             class="text-sm text-primary underline underline-offset-2"
             >{{ t('settings.customPatches.covers.providersLink') }}</RouterLink
           >

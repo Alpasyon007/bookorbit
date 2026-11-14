@@ -39,6 +39,38 @@ describe('CustomPatchSettingsService', () => {
       BadRequestException,
     );
   });
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])('normalizes the legacy cover preference without changing other settings', async (enabled, metadataSourcesEnabled, expected) => {
+    const legacy = {
+      ...structuredClone(DEFAULT_CUSTOM_PATCH_PREFERENCES),
+      seriesGrid: { ...DEFAULT_CUSTOM_PATCH_PREFERENCES.seriesGrid, hierarchyOrder: 'reverse' },
+      coverSearch: { enabled, metadataSourcesEnabled, retailerSources: ['foyles'] },
+    };
+    users.getCustomPatchSettings.mockResolvedValue(legacy);
+    const result = await service.getPreferences(5);
+    expect(result.coverSearch).toEqual({ enabled: expected });
+    expect(result.seriesGrid.hierarchyOrder).toBe('reverse');
+    expect(users.setCustomPatchSettings).not.toHaveBeenCalled();
+    await service.setPreferences(5, legacy);
+    expect(users.setCustomPatchSettings).toHaveBeenCalledWith(5, expect.objectContaining({ coverSearch: { enabled: expected } }));
+  });
+  it('rejects partial or unknown legacy cover settings', async () => {
+    const preferences = structuredClone(DEFAULT_CUSTOM_PATCH_PREFERENCES);
+    await expect(service.setPreferences(5, { ...preferences, coverSearch: { enabled: true, retailerSources: ['foyles'] } })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(
+      service.setPreferences(5, {
+        ...preferences,
+        coverSearch: { enabled: true, metadataSourcesEnabled: true, retailerSources: ['foyles'], unknown: true },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('validates policy and refuses malformed or newer stored versions', async () => {
     await service.setPolicy(7, { ...DEFAULT_CUSTOM_PATCH_POLICY, seriesGridEnabled: false });
     expect(app.setValue).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('"seriesGridEnabled":false'));

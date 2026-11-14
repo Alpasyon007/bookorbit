@@ -4378,8 +4378,8 @@
             "hint": "Users with request access can browse and request released books from the Hardcover series catalog."
           },
           "extendedCoverSearchEnabled": {
-            "label": "Allow additional cover sources",
-            "hint": "Users with metadata editing access can search retailers and compatible metadata providers for covers."
+            "label": "Allow built-in metadata cover sources",
+            "hint": "Users with metadata editing access can include compatible built-in metadata providers in cover search. External providers follow their own settings."
           }
         }
       },
@@ -4436,12 +4436,12 @@
       },
       "covers": {
         "title": "Cover Sources",
-        "enabled": "Use additional cover sources",
-        "enabledHint": "Include indexed retailer results and covers from compatible metadata providers.",
-        "metadata": "Use metadata providers for cover search",
-        "metadataHint": "Includes compatible providers already enabled on this server.",
+        "enabled": "Use built-in metadata providers for cover search",
+        "enabledHint": "Include compatible built-in metadata providers enabled on this server, such as Open Library.",
+        "policyDisabled": "Built-in metadata covers are unavailable on this server. Your preference is kept.",
+        "externalHint": "Enabled providers that supply covers appear in cover search. Manage them under Metadata Providers.",
         "defaultSourceLink": "Change default cover search source",
-        "providersLink": "Manage metadata providers"
+        "providersLink": "Manage external metadata providers"
       }
     },
     "nav": {

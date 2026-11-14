@@ -95,4 +95,25 @@ describe('Custom Patch Preferences', () => {
     await button(wrapper, 'Retry').trigger('click')
     expect(load).toHaveBeenCalledOnce()
   })
+
+  it('keeps one built-in cover toggle and links administrators to native external providers', async () => {
+    permissions.add(Permission.LibraryEditMetadata)
+    permissions.add(Permission.ManageMetadataConfig)
+    const wrapper = mountPage()
+    const coverSettings = wrapper.get('section[aria-labelledby="custom-patches-covers-title"]')
+    expect(coverSettings.findAll('[role="switch"]')).toHaveLength(1)
+    expect(coverSettings.text()).toContain('Use built-in metadata providers for cover search')
+    expect(coverSettings.text()).toContain('Enabled providers that supply covers appear in cover search')
+    const externalLink = coverSettings
+      .findAllComponents(RouterLinkStub)
+      .find((link: { text(): string }) => link.text() === 'Manage external metadata providers')
+    expect(externalLink?.props('to')).toEqual({
+      name: 'settings-metadata-providers',
+      query: { tab: 'external' },
+    })
+    await coverSettings.get('[role="switch"]').trigger('click')
+    await button(wrapper, 'Save').trigger('click')
+    await flushPromises()
+    expect(savePreferences.mock.calls[0]?.[0]?.coverSearch).toEqual({ enabled: false })
+  })
 })

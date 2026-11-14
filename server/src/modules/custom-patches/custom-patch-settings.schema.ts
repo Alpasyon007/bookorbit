@@ -24,15 +24,20 @@ export const customPatchPreferencesSchema = z
       })
       .strict(),
     coverSearch: z
-      .object({
-        enabled: z.boolean(),
-        retailerSources: z
-          .array(z.enum(['hachette-uk', 'waterstones', 'foyles']))
-          .max(3)
-          .refine((items) => new Set(items).size === items.length),
-        metadataSourcesEnabled: z.boolean(),
-      })
-      .strict(),
+      .union([
+        z.object({ enabled: z.boolean() }).strict(),
+        z
+          .object({
+            enabled: z.boolean(),
+            retailerSources: z
+              .array(z.enum(['hachette-uk', 'waterstones', 'foyles']))
+              .max(3)
+              .refine((items) => new Set(items).size === items.length),
+            metadataSourcesEnabled: z.boolean(),
+          })
+          .strict(),
+      ])
+      .transform((value) => ({ enabled: value.enabled && (!('metadataSourcesEnabled' in value) || value.metadataSourcesEnabled) })),
   })
   .strict();
 

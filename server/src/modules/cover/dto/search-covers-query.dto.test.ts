@@ -40,7 +40,7 @@ describe('SearchCoversQueryDto', () => {
     expect((await validateInput({ title: 'Dune', provider: 'itunes' })).errors).toHaveLength(0);
     expect((await validateInput({ title: 'Dune', provider: 'audiobookcovers' })).errors).toHaveLength(0);
     expect((await validateInput({ title: 'Dune', provider: 'all' })).errors).toHaveLength(0);
-    expect((await validateInput({ title: 'Dune', provider: 'hachette-uk' })).errors).toHaveLength(0);
+    expect((await validateInput({ title: 'Dune', provider: 'hachette-uk' })).errors).toHaveLength(1);
     expect((await validateInput({ title: 'Dune', provider: 'metadata:openLibrary' })).errors).toHaveLength(0);
     expect((await validateInput({ title: 'Dune', provider: 'metadata:local-catalog' })).errors).toHaveLength(0);
     expect((await validateInput({ title: 'Dune', provider: 'metadata:https://example.com' })).errors).toHaveLength(1);

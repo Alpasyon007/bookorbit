@@ -116,68 +116,6 @@ describe('DuckDuckGoCoverProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    [
-      'hachette-uk',
-      'hachette.co.uk',
-      'https://www.hachette.co.uk/titles/n-k-jemisin/the-fifth-season/9780356508191/',
-      'https://www.hachette.co.uk/wp-content/uploads/2019/02/hbg-title-the-fifth-season-297.jpg',
-    ],
-    [
-      'waterstones',
-      'waterstones.com',
-      'https://www.waterstones.com/book/chapter-house-dune/frank-herbert/9781473233812',
-      'https://cdn.waterstones.com/bookjackets/large/9781/4732/9781473233812.jpg',
-    ],
-    [
-      'foyles',
-      'foyles.co.uk',
-      'https://www.foyles.co.uk/book/dune/frank-herbert/9781399601788',
-      'https://cdn.foyles.co.uk/override/v1/large/9781/3996/9781399601788.jpg',
-    ],
-  ] as const)('returns verified book covers from the %s image index only', async (source, domain, page, image) => {
-    const result = { url: page, image, thumbnail: 'https://tse2.mm.bing.net/th?id=example', width: 265, height: 400 };
-    const response = Response.json({
-      results: [
-        { ...result, url: page.replace(domain, `${domain}.example.com`) },
-        { ...result, url: `https://www.${domain}/booklist/frank-herbert` },
-        { ...result, image: 'https://offsite.example.com/jacket.jpg' },
-        { ...result, image: `https://www.${domain}@offsite.example.com/jacket.jpg` },
-        { ...result, width: 400, height: 400 },
-        result,
-        result,
-      ],
-    });
-    fetchMock.mockResolvedValueOnce(new Response('<html>vqd="4-123-456"</html>')).mockResolvedValueOnce(response);
-
-    const output = await provider.searchIndexedSite(source, { title: 'Dune', author: 'Frank Herbert' });
-
-    expect(output).toEqual({
-      failed: false,
-      results: [
-        expect.objectContaining({
-          url: image,
-          previewUrl: result.thumbnail,
-          source: expect.stringContaining('(via DuckDuckGo)'),
-        }),
-      ],
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    for (const [url] of fetchMock.mock.calls as [string][]) {
-      const parsed = new URL(url);
-      expect(parsed.hostname).toBe('duckduckgo.com');
-      expect(parsed.searchParams.get('q')).toBe(`Dune Frank Herbert book cover site:${domain}`);
-      expect(parsed.searchParams.get('kl')).toBe('uk-en');
-    }
-  });
-
-  it('reports an unavailable index separately from an empty result', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('', { status: 403 }));
-    await expect(provider.searchIndexedSite('foyles', { title: 'Dune' })).resolves.toEqual({ results: [], failed: true });
-    fetchMock.mockResolvedValueOnce(new Response('<html>vqd="4-123-456"</html>')).mockResolvedValueOnce(Response.json({ results: [] }));
-    await expect(provider.searchIndexedSite('foyles', { title: 'Dune' })).resolves.toEqual({ results: [], failed: false });
-  });
-
   describe('determineSource', () => {
     it.each([
       ['https://www.amazon.com/dp/B001', 'Amazon'],

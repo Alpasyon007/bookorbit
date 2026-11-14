@@ -1,14 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CoverSearchResult } from '@bookorbit/types';
 import { readBoundedText } from '../../../common/utils/bounded-response';
-import { sanitizeLogValue } from '../../../common/utils/log-sanitize.utils';
 import { COVER_PROXY_USER_AGENT } from '../constants';
 import { CoverProvider, CoverSearchParams, DUCKDUCKGO_PROVIDER_KEY } from './cover-provider';
-import { indexedCoverDomain, indexedCoverResult, type IndexedCoverSource } from './indexed-cover-sources';
 
 const SEARCH_TIMEOUT_MS = 8_000;
 const MAX_SEARCH_BYTES = 2 * 1024 * 1024;
-const INDEXED_RESULT_LIMIT = 12;
 
 interface DuckDuckGoImage {
   image: string;
@@ -80,38 +77,6 @@ export class DuckDuckGoCoverProvider implements CoverProvider {
       this.logger.error(`Error searching DuckDuckGo: ${message}`, stack);
       return [];
     }
-  }
-
-  async searchIndexedSite(source: IndexedCoverSource, params: CoverSearchParams): Promise<{ results: CoverSearchResult[]; failed: boolean }> {
-    const startedAt = Date.now();
-    this.logger.debug(`[cover.indexed_search] [start] provider=${source} - indexed cover search started`);
-    try {
-      const results = await this.findIndexedSiteCovers(source, params);
-      this.logger.debug(
-        `[cover.indexed_search] [end] provider=${source} durationMs=${Date.now() - startedAt} resultCount=${results.length} - indexed cover search completed`,
-      );
-      return { results, failed: false };
-    } catch (error) {
-      const errorClass = error instanceof Error ? error.name : 'UnknownError';
-      this.logger.warn(
-        `[cover.indexed_search] [fail] provider=${source} durationMs=${Date.now() - startedAt} errorClass=${errorClass} error="${sanitizeLogValue(error instanceof Error ? error.message : String(error))}" - indexed cover search failed`,
-      );
-      return { results: [], failed: true };
-    }
-  }
-
-  private async findIndexedSiteCovers(source: IndexedCoverSource, params: CoverSearchParams): Promise<CoverSearchResult[]> {
-    const terms = [params.title, params.author, 'book cover'].filter(Boolean).join(' ');
-    const { images, failed } = await this.requestImages(`${terms} site:${indexedCoverDomain(source)}`, '&iar=images&kl=uk-en', params.signal);
-    if (failed) return Promise.reject(new Error('DuckDuckGo image index did not return usable results'));
-    const results = new Map<string, CoverSearchResult>();
-    for (const { url, image, thumbnail, width, height } of images) {
-      const result = indexedCoverResult(source, { page: url, image, thumbnail, width, height });
-      if (!result || results.has(result.sourceUrl)) continue;
-      results.set(result.sourceUrl, result);
-      if (results.size >= INDEXED_RESULT_LIMIT) break;
-    }
-    return [...results.values()];
   }
 
   private async performSearch(query: string, searchParams: string, signal?: AbortSignal): Promise<CoverSearchResult[]> {

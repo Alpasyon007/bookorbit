@@ -1,7 +1,8 @@
 import {
   BUILT_IN_COVER_SEARCH_SOURCES,
   COVER_SEARCH_METADATA_PREFIX,
-  DEFAULT_CUSTOM_PATCH_PREFERENCES,
+  isBuiltInMetadataProviderKey,
+  isCoverSearchSourceKey,
   type CoverSearchSource,
 } from '@bookorbit/types'
 import { computed, shallowRef, watch } from 'vue'
@@ -10,21 +11,20 @@ import { createCoalescedFetch, createRequestGeneration } from '@/lib/async'
 import { useAuth } from '@/features/auth/composables/useAuth'
 import { useCustomPatchSettings } from '@/features/custom-patches/composables/useCustomPatchSettings'
 
-const retailerKeys = new Set<string>(DEFAULT_CUSTOM_PATCH_PREFERENCES.coverSearch.retailerSources)
-const basicSources = BUILT_IN_COVER_SEARCH_SOURCES.filter(({ key }) => !retailerKeys.has(key))
-
 export function useCoverSearchSources() {
   const { user } = useAuth()
-  const { preferences, policy } = useCustomPatchSettings()
+  const { preferences, policy, loaded } = useCustomPatchSettings()
   const generation = createRequestGeneration()
-  const listedSources = shallowRef<readonly CoverSearchSource[]>(basicSources)
+  const listedSources = shallowRef<readonly CoverSearchSource[]>(BUILT_IN_COVER_SEARCH_SOURCES)
   const sources = computed(() => {
-    const settings = preferences.value.coverSearch
-    const extended = settings.enabled && policy.value.extendedCoverSearchEnabled
-    return listedSources.value.filter(({ key }) => {
-      if (key.startsWith(COVER_SEARCH_METADATA_PREFIX)) return extended && settings.metadataSourcesEnabled
-      return !retailerKeys.has(key) || (extended && settings.retailerSources.some((source) => source === key))
-    })
+    const includeBuiltInMetadata = loaded.value && preferences.value.coverSearch.enabled && policy.value.extendedCoverSearchEnabled
+    return listedSources.value.filter(
+      ({ key }) =>
+        isCoverSearchSourceKey(key) &&
+        (includeBuiltInMetadata ||
+          !key.startsWith(COVER_SEARCH_METADATA_PREFIX) ||
+          !isBuiltInMetadataProviderKey(key.slice(COVER_SEARCH_METADATA_PREFIX.length))),
+    )
   })
   let requested = false
   const fetchSources = createCoalescedFetch(async () => {
@@ -43,7 +43,7 @@ export function useCoverSearchSources() {
   function resetSources() {
     generation.invalidate()
     fetchSources.clear()
-    listedSources.value = basicSources
+    listedSources.value = BUILT_IN_COVER_SEARCH_SOURCES
   }
 
   watch(
@@ -54,21 +54,13 @@ export function useCoverSearchSources() {
     },
     { flush: 'sync' },
   )
-  watch(
-    [
-      () => preferences.value.coverSearch.enabled,
-      () => preferences.value.coverSearch.metadataSourcesEnabled,
-      () => preferences.value.coverSearch.retailerSources.join(','),
-      () => policy.value.extendedCoverSearchEnabled,
-    ],
-    () => {
-      if (requested && user.value) {
-        generation.invalidate()
-        fetchSources.clear()
-        void fetchSources()
-      }
-    },
-  )
+  watch([loaded, () => preferences.value.coverSearch.enabled, () => policy.value.extendedCoverSearchEnabled], () => {
+    if (requested && user.value) {
+      generation.invalidate()
+      fetchSources.clear()
+      void fetchSources()
+    }
+  })
 
   function load() {
     requested = true

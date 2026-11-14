@@ -169,13 +169,19 @@ describe('UserPreferencesService', () => {
     await expect(service.getCoverSearchPreferences(7)).resolves.toEqual({ defaultProvider: 'duckduckgo' });
   });
 
-  it.each(['duckduckgo', 'itunes', 'all', 'foyles', 'audiobookcovers', 'metadata:hardcover', 'metadata:local-catalog'] as const)(
+  it.each(['duckduckgo', 'itunes', 'all', 'audiobookcovers', 'metadata:hardcover', 'metadata:foyles', 'metadata:local-catalog'] as const)(
     'upsertCoverSearchPreferences accepts %s',
     async (defaultProvider) => {
       await expect(service.upsertCoverSearchPreferences(11, { defaultProvider })).resolves.toBeUndefined();
       expect(repo.upsert).toHaveBeenCalledWith(11, 'cover-search', { defaultProvider });
     },
   );
+
+  it.each(['hachette-uk', 'waterstones', 'foyles'])('falls back from retired %s without writing preferences', async (defaultProvider) => {
+    repo.findByCategory.mockResolvedValueOnce({ data: { defaultProvider } } as never);
+    await expect(service.getCoverSearchPreferences(7)).resolves.toEqual({ defaultProvider: 'duckduckgo' });
+    expect(repo.upsert).not.toHaveBeenCalled();
+  });
 
   it('upsertCoverSearchPreferences rejects an invalid source key', async () => {
     await expect(service.upsertCoverSearchPreferences(11, { defaultProvider: 'metadata:https://example.com' })).rejects.toBeInstanceOf(

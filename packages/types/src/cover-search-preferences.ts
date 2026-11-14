@@ -21,9 +21,6 @@ export const BUILT_IN_COVER_SEARCH_SOURCES: readonly CoverSearchSource[] = [
   { key: "duckduckgo", label: "DuckDuckGo", media: ["ebook", "audio"] },
   { key: "itunes", label: "iTunes", media: ["ebook", "audio"] },
   { key: "audiobookcovers", label: "AudiobookCovers", media: ["audio"] },
-  { key: "hachette-uk", label: "Hachette UK (via DuckDuckGo)", media: ["ebook"] },
-  { key: "waterstones", label: "Waterstones (via DuckDuckGo)", media: ["ebook"] },
-  { key: "foyles", label: "Foyles (via DuckDuckGo)", media: ["ebook"] },
 ];
 
 export function isCoverSearchSourceKey(value: unknown): value is string {

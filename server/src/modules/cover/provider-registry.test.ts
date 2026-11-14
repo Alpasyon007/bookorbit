@@ -14,14 +14,12 @@ function makeProvider(key: CoverProvider['key']): CoverProvider {
 describe('CoverProviderRegistry', () => {
   const duckduckgo = makeProvider(DUCKDUCKGO_PROVIDER_KEY);
   const itunes = makeProvider(ITUNES_PROVIDER_KEY);
-  const searchIndexedSite = vi.fn();
   const metadataSources = vi.fn();
   const search = vi.fn();
   const getPolicy = vi.fn().mockResolvedValue(DEFAULT_CUSTOM_PATCH_POLICY);
   const getPreferences = vi.fn().mockResolvedValue(DEFAULT_CUSTOM_PATCH_PREFERENCES);
   const registry = new CoverProviderRegistry(
     [duckduckgo, itunes],
-    { searchIndexedSite } as never,
     { sources: metadataSources, search } as never,
     { getPolicy, getPreferences } as never,
   );
@@ -33,6 +31,7 @@ describe('CoverProviderRegistry', () => {
     metadataSources.mockResolvedValue([
       { key: 'metadata:hardcover', provider: 'hardcover', label: 'Hardcover', media: ['ebook', 'audio'] },
       { key: 'metadata:openLibrary', provider: 'openLibrary', label: 'Open Library', media: ['ebook'] },
+      { key: 'metadata:foyles', provider: 'foyles', label: 'Foyles', media: ['ebook'] },
     ]);
   });
 
@@ -44,11 +43,9 @@ describe('CoverProviderRegistry', () => {
     expect((await registry.select(7, 'all')).map(({ key }) => key)).toEqual([
       'duckduckgo',
       'itunes',
-      'hachette-uk',
-      'waterstones',
-      'foyles',
       'metadata:hardcover',
       'metadata:openLibrary',
+      'metadata:foyles',
     ]);
     expect((await registry.select(7, 'all', true)).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'metadata:hardcover']);
   });
@@ -57,38 +54,30 @@ describe('CoverProviderRegistry', () => {
     await expect(registry.select(7, ITUNES_PROVIDER_KEY)).resolves.toEqual([itunes]);
   });
 
-  it('lists and searches only the current user’s enabled extended sources', async () => {
-    getPreferences.mockImplementation((userId: number) =>
-      Promise.resolve(
-        userId === 7
-          ? { ...DEFAULT_CUSTOM_PATCH_PREFERENCES, coverSearch: { enabled: true, retailerSources: ['foyles'], metadataSourcesEnabled: false } }
-          : DEFAULT_CUSTOM_PATCH_PREFERENCES,
-      ),
-    );
-    expect((await registry.list(7)).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'audiobookcovers', 'foyles']);
-    expect((await registry.select(7, 'all')).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'foyles']);
-    await expect(registry.select(7, 'waterstones')).rejects.toThrow('Cover provider is unavailable');
-    await expect(registry.select(7, 'metadata:hardcover')).rejects.toThrow('Cover provider is unavailable');
-    expect(metadataSources).not.toHaveBeenCalled();
-    expect((await registry.list(9)).map(({ key }) => key)).toContain('metadata:hardcover');
-    await expect(registry.select(9, 'waterstones')).resolves.toMatchObject([{ key: 'waterstones' }]);
-  });
-
-  it.each(['personal', 'instance'])('keeps basic cover searches when the %s extension is disabled', async (scope) => {
+  it.each(['personal', 'instance'])('keeps native external covers when the %s built-in extension is disabled', async (scope) => {
     if (scope === 'personal') {
-      getPreferences.mockResolvedValue({
-        ...DEFAULT_CUSTOM_PATCH_PREFERENCES,
-        coverSearch: { ...DEFAULT_CUSTOM_PATCH_PREFERENCES.coverSearch, enabled: false },
-      });
+      getPreferences.mockResolvedValue({ ...DEFAULT_CUSTOM_PATCH_PREFERENCES, coverSearch: { enabled: false } });
     } else {
       getPolicy.mockResolvedValue({ ...DEFAULT_CUSTOM_PATCH_POLICY, extendedCoverSearchEnabled: false });
     }
-    expect((await registry.list(7)).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'audiobookcovers']);
-    expect((await registry.select(7, 'all')).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes']);
-    await expect(registry.select(7, 'foyles')).rejects.toThrow(BadRequestException);
+    expect((await registry.list(7)).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'audiobookcovers', 'metadata:foyles']);
+    expect((await registry.select(7, 'all')).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'metadata:foyles']);
     await expect(registry.select(7, 'metadata:hardcover')).rejects.toThrow(BadRequestException);
+    await expect(registry.select(7, 'metadata:foyles')).resolves.toMatchObject([{ key: 'metadata:foyles' }]);
+    await expect(registry.select(7, 'foyles')).rejects.toThrow(BadRequestException);
     await expect(registry.select(7, 'duckduckgo')).resolves.toEqual([duckduckgo]);
-    expect(metadataSources).not.toHaveBeenCalled();
+  });
+
+  it('keeps native external providers available when custom settings cannot load', async () => {
+    getPolicy.mockRejectedValue(new Error('settings unavailable'));
+    expect((await registry.list(7)).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'audiobookcovers', 'metadata:foyles']);
+    expect((await registry.select(7, 'all')).map(({ key }) => key)).toEqual(['duckduckgo', 'itunes', 'metadata:foyles']);
+    getPolicy.mockClear();
+    getPreferences.mockClear();
+    await expect(registry.select(7, 'metadata:foyles')).resolves.toMatchObject([{ key: 'metadata:foyles' }]);
+    expect(getPolicy).not.toHaveBeenCalled();
+    expect(getPreferences).not.toHaveBeenCalled();
+    await expect(registry.select(7, 'metadata:disabled')).rejects.toThrow(BadRequestException);
   });
 
   it('trims provider values before selecting', async () => {
@@ -99,13 +88,6 @@ describe('CoverProviderRegistry', () => {
     await expect(registry.select(7, 'unknown')).rejects.toThrow(BadRequestException);
     await expect(registry.select(7, 'metadata:disabled')).rejects.toThrow(BadRequestException);
     await expect(registry.select(7, 'metadata:openLibrary', true)).rejects.toThrow(BadRequestException);
-  });
-
-  it('routes indexed lookups to the selected site', async () => {
-    const [operation] = await registry.select(7, 'foyles');
-    await operation.search({ title: 'Dune' });
-    expect(searchIndexedSite).toHaveBeenCalledWith('foyles', { title: 'Dune' });
-    await expect(registry.select(7, 'foyles', true)).resolves.toEqual([]);
   });
 
   it('maps real Open Library cover URLs without inventing dimensions or rendering missing-image placeholders', async () => {

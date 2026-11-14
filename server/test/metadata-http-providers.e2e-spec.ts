@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 
 import type { BookDetail, MetadataHttpProviderView, MetadataProviderDirectory, MetadataProviderInfo } from '@bookorbit/types';
 import { and, eq } from 'drizzle-orm';
+import sharp from 'sharp';
 
 import * as schema from '../src/db/schema';
 import {
@@ -22,6 +23,7 @@ const KEY = 'fake-provider';
 const COLOR = '#336699';
 const ICON = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 const TITLE = 'Zero Coupling Novel';
+const COVER_URL = 'https://93.184.216.34/fixture-cover.png';
 
 /**
  * A provider BookOrbit has never heard of, served by the test itself. Nothing in BookOrbit names
@@ -35,7 +37,7 @@ class FakeProvider {
   async start(): Promise<void> {
     this.server = createServer((req, res) => this.handle(req, res));
     await new Promise<void>((resolve) => this.server.listen(0, '127.0.0.1', resolve));
-    this.baseUrl = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}/`;
+    this.baseUrl = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}/fixture/`;
   }
 
   stop(): Promise<void> {
@@ -44,17 +46,18 @@ class FakeProvider {
 
   private handle(req: IncomingMessage, res: ServerResponse): void {
     const url = new URL(req.url ?? '/', 'http://fake');
-    this.calls.push(url.pathname);
+    const path = url.pathname.replace(/^\/fixture(?=\/)/, '');
+    this.calls.push(path);
     const send = (status: number, body: unknown) => {
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(body));
     };
-    if (url.pathname === '/icon.png') {
+    if (path === '/icon.png') {
       res.writeHead(200, { 'content-type': 'image/png' });
       res.end(ICON);
       return;
     }
-    if (url.pathname === '/provider/info') {
+    if (path === '/provider/info') {
       return send(200, {
         name: 'Fake Provider',
         key: KEY,
@@ -64,12 +67,12 @@ class FakeProvider {
         lookup: true,
         mediaTypes: ['book'],
         searchParams: ['isbn', 'limit'],
-        supportedFields: ['title', 'description', 'publisher', 'communityRating'],
+        supportedFields: ['title', 'description', 'publisher', 'communityRating', 'cover'],
         bookUrlTemplate: 'https://fake.example/books/{id}',
       });
     }
-    if (url.pathname === '/search') return send(200, { matches: [this.record('fp-1')] });
-    const lookup = /^\/book\/(.+)$/.exec(url.pathname);
+    if (path === '/search') return send(200, { matches: [this.record('fp-1')] });
+    const lookup = /^\/book\/(.+)$/.exec(path);
     if (lookup) return lookup[1] === 'fp-1' ? send(200, this.record('fp-1')) : send(404, { error: 'Not found' });
     send(404, { error: 'Not found' });
   }
@@ -81,6 +84,9 @@ class FakeProvider {
       authors: ['Test Author'],
       description: 'A description only the fake provider knows.',
       publisher: 'Fake House',
+      cover: COVER_URL,
+      coverWidth: 318,
+      coverHeight: 500,
       rating: 4.2,
       ratingCount: 321,
       url: `https://fake.example/books/${id}?from=search`,
@@ -189,6 +195,47 @@ describe('External metadata providers (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       },
     ]);
     expect(new Set(providers.map((p) => p.key)).size).toBe(providers.length);
+  });
+
+  it('searches and applies an external provider cover independently of custom patch switches', async () => {
+    const tested = await call(admin, 'POST', `/metadata-http-providers/${providerId}/test`, { query: TITLE });
+    expect(tested.statusCode, tested.body).toBe(200);
+    expect(tested.json()).toMatchObject({ ok: true });
+    const policy = (await call(admin, 'GET', '/custom-patches/policy')).json().settings;
+    const preferences = (await call(admin, 'GET', '/custom-patches/preferences')).json().settings;
+    const image = await sharp({ create: { width: 318, height: 500, channels: 3, background: '#336699' } })
+      .png()
+      .toBuffer();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === COVER_URL) return Promise.resolve(new Response(new Uint8Array(image), { headers: { 'content-type': 'image/png' } }));
+      return originalFetch(input, init);
+    });
+    try {
+      expect((await call(admin, 'PUT', '/custom-patches/policy', { settings: { ...policy, extendedCoverSearchEnabled: false } })).statusCode).toBe(
+        204,
+      );
+      expect(
+        (await call(admin, 'PUT', '/custom-patches/preferences', { settings: { ...preferences, coverSearch: { enabled: false } } })).statusCode,
+      ).toBe(204);
+      const sources = await call(admin, 'GET', '/books/cover/sources');
+      expect(sources.statusCode).toBe(200);
+      expect(sources.json().map((source: { key: string }) => source.key)).toContain(`metadata:${KEY}`);
+      const results = await call(admin, 'GET', `/books/cover/search?provider=metadata:${KEY}&title=${encodeURIComponent(TITLE)}`);
+      expect(results.statusCode, results.body).toBe(200);
+      expect(results.json()).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'Fake Provider', sourceUrl: COVER_URL })]));
+      const preview = await call(admin, 'GET', `/books/cover/proxy?url=${encodeURIComponent(COVER_URL)}`);
+      expect(preview.statusCode).toBe(200);
+      expect(preview.headers['content-type']).toContain('image/png');
+      expect(preview.rawPayload.equals(image)).toBe(true);
+      const applied = await call(admin, 'POST', `/books/${bookId}/cover/from-url`, { url: COVER_URL });
+      expect(applied.statusCode, applied.body).toBe(204);
+    } finally {
+      fetchSpy.mockRestore();
+      await call(admin, 'PUT', '/custom-patches/policy', { settings: policy });
+      await call(admin, 'PUT', '/custom-patches/preferences', { settings: preferences });
+    }
   });
 
   it("serves the provider's icon from BookOrbit to every signed-in user", async () => {

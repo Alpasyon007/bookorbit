@@ -108,28 +108,49 @@ describe('ReleaseNotesService fork versions', () => {
     expect((await service.getSince('v3.8.0-custom.10')).releases).toEqual([]);
   });
 
+  it('shows only custom.11 when updating from custom.10', async () => {
+    const service = await createService('v3.8.0-custom.11', ['v3.8.1', 'v3.8.0']);
+    const { releases } = await service.getSince('v3.8.0-custom.10');
+    expect(releases.map((release) => release.version)).toEqual(['v3.8.0-custom.11']);
+    expect(releases[0]?.changelogBody).toContain('providers/uk-metadata/README.md');
+    expect((await service.getSince('v3.8.0-custom.11')).releases).toEqual([]);
+  });
+
   it.each(['v3.8.0-custom.1', 'v3.8.0.1'])('advances from saved baseline %s while excluding future releases', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.10.0', 'v3.9.0', 'v3.8.1', 'v3.8.0']);
     expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.11',
       'v3.8.0-custom.10',
       'v3.8.0-custom.9',
       'v3.8.0-custom.8',
-      'v3.8.0-custom.7',
     ]);
     expect((await service.getSince('v3.8.0-custom.7')).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.11',
       'v3.8.0-custom.10',
       'v3.8.0-custom.9',
       'v3.8.0-custom.8',
+    ]);
+    expect((await service.getSince('v3.8.0-custom.8')).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.11',
+      'v3.8.0-custom.10',
+      'v3.8.0-custom.9',
       'v3.9.0',
     ]);
   });
 
   it.each([null, 'v3.8.0-custom.7'])('rejects malformed release candidates and legacy four-part upstream tags with baseline %s', async (since) => {
     const service = await createService('v3.9.0-custom.1', ['v3.9.0-custom.0', 'v3.9.0junk', 'v3.8.0.2', 'v3.8.1']);
-    expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual(
-      since
-        ? ['v3.8.0-custom.10', 'v3.8.0-custom.9', 'v3.8.0-custom.8', 'v3.8.1']
-        : ['v3.8.0-custom.10', 'v3.8.0-custom.9', 'v3.8.0-custom.8', 'v3.8.0-custom.7'],
-    );
+    expect((await service.getSince(since)).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.11',
+      'v3.8.0-custom.10',
+      'v3.8.0-custom.9',
+      'v3.8.0-custom.8',
+    ]);
+    expect((await service.getSince('v3.8.0-custom.8')).releases.map((release) => release.version)).toEqual([
+      'v3.8.0-custom.11',
+      'v3.8.0-custom.10',
+      'v3.8.0-custom.9',
+      'v3.8.1',
+    ]);
   });
 });

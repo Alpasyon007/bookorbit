@@ -2,6 +2,33 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.11',
+    name: 'Custom revision 11: external UK metadata providers',
+    date: '2026-11-14',
+    highlights: [
+      {
+        icon: 'Image',
+        title: 'UK cover sources move to External Providers',
+        body: 'An administrator can run the UK metadata companion and register Hachette UK, Waterstones Jackets and Foyles Jackets under Settings > Metadata > Providers > External. Enabled providers that supply covers appear in cover search.',
+        media: [],
+      },
+      {
+        icon: 'SlidersHorizontal',
+        title: 'Choose your default cover source',
+        body: 'If your default was one of the old retailer sources, cover search starts with DuckDuckGo. You can choose another default under Settings > Appearance > Book Covers.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.11',
+    changelogBody: [
+      '### Custom changes',
+      '- Replace the retired DuckDuckGo retailer searches with an optional UK metadata companion. Add it as three HTTP providers under Settings > Metadata > Providers > External. See the [setup guide](https://github.com/Alpasyon007/bookorbit/blob/v3.8.0-custom.11/providers/uk-metadata/README.md) for the service URLs and registration steps.',
+      '- External providers use the normal provider enable switches. Custom Patches still controls whether built-in metadata providers appear in cover search. Saved patch preferences carry forward, and a retired cover default falls back to DuckDuckGo.',
+      '- Waterstones and Foyles results use Open Library metadata with covers verified against the relevant retailer jacket source. Cover availability varies by edition.',
+      'Based on upstream v3.8.0. No database migration is required.',
+    ].join('\n\n'),
+  },
+  {
     version: 'v3.8.0-custom.10',
     name: 'Custom revision 10: custom patch settings',
     date: '2026-11-14',

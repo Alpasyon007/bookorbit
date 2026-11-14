@@ -28,13 +28,13 @@ describe('useCoverSearchPreferences', () => {
     state.user.value = { id: 8 }
     state.api.mockResolvedValueOnce(saved('itunes'))
     await expect(model.load()).resolves.toBe(true)
-    oldLoad.resolve(saved('foyles'))
+    oldLoad.resolve(saved('metadata:foyles'))
     await expect(first).resolves.toBe(false)
     expect(model.defaultProvider.value).toBe('itunes')
 
     const oldSave = deferredResponse()
     state.api.mockReturnValueOnce(oldSave.promise)
-    const save = model.update('waterstones')
+    const save = model.update('metadata:waterstones')
     state.user.value = { id: 9 }
     expect(model.defaultProvider.value).toBe('duckduckgo')
     state.api.mockResolvedValueOnce(saved('metadata:hardcover'))
@@ -44,5 +44,16 @@ describe('useCoverSearchPreferences', () => {
     await nextTick()
     expect(model.defaultProvider.value).toBe('metadata:hardcover')
     expect(model.isSaving.value).toBe(false)
+  })
+
+  it('falls back for a retired retailer preference and only saves valid sources', async () => {
+    const model = useCoverSearchPreferences()
+    state.user.value = { id: 10 }
+    state.api.mockClear()
+    state.api.mockResolvedValueOnce(saved('foyles'))
+    await expect(model.load()).resolves.toBe(true)
+    expect(model.defaultProvider.value).toBe('duckduckgo')
+    await expect(model.update('foyles')).resolves.toBe(false)
+    expect(state.api).toHaveBeenCalledOnce()
   })
 })
