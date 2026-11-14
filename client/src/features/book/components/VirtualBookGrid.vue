@@ -152,10 +152,6 @@ function seriesHeadingTag(depth: number) {
   return depth < 5 ? `h${depth + 2}` : 'div'
 }
 
-function seriesHeadingStyle(row: SeriesGridRow) {
-  return { height: `${row.size}px`, paddingInlineStart: `${Math.min(row.heading?.depth ?? 0, 4) * 16}px` }
-}
-
 function seriesHeadingLabel(heading: NonNullable<SeriesGridRow['heading']>) {
   const label = heading.label ?? t('views.bookView.seriesGrid.standalone')
   return heading.continued ? t('views.bookView.seriesGrid.continued', { series: label }) : label
@@ -405,7 +401,7 @@ defineExpose({ scrollToIndex })
       @update="handleSeriesGridUpdate"
     >
       <template #default="{ item }">
-        <div v-if="item.heading" class="flex items-center pb-2" :style="seriesHeadingStyle(item)">
+        <div v-if="item.heading" class="flex items-center pb-2" :style="{ height: `${item.size}px` }">
           <component
             :is="seriesHeadingTag(item.heading.depth)"
             class="w-full truncate border-b border-border pb-2 text-sm text-foreground"
