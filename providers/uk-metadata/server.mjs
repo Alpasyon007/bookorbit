@@ -46,6 +46,7 @@ export function createMetadataServer({ authToken, contact, fetcher, logger = con
     if (endpoint === "provider/info") return send(res, 200, providerInfo(key, Boolean(tokenHash)));
     const isLookup = Boolean(id);
     const params = isLookup ? parseId(id) : parseSearch(url.searchParams);
+    if (!params && isLookup) return reply(res, true);
     if (!params) return send(res, 400, { error: "Invalid title, ISBN, media or result limit" });
     if (params.incompatible) return send(res, 200, { matches: [] });
 

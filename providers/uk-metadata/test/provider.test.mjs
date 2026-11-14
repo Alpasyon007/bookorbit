@@ -105,6 +105,7 @@ test("serves three distinct native contracts and optionally requires bearer auth
     assert.deepEqual(body.searchParams, ["query", "author", "mediaType", "isbn", "limit"]);
     assert.deepEqual((await get(search(key, { query: "Dune", mediaType: "audiobook" }), headers)).body, { matches: [] });
     assert.equal((await get(search(key, { isbn: "9780356508190" }), headers)).status, 400);
+    assert.equal((await get(`/${key}/book/no-such-book`, headers)).status, 404);
   }
   assert.equal(seen.length, 0);
 });
