@@ -122,15 +122,23 @@ describe('SettingsNav', () => {
 
   describe('group visibility', () => {
     it('shows personal and library preferences to a user without permissions', () => {
-      expect(groupLabels(mountNav())).toEqual(['You', 'Library'])
+      expect(groupLabels(mountNav())).toEqual(['You', 'Library', 'Custom Patches'])
     })
 
     it('shows every group to a superuser', () => {
-      expect(groupLabels(mountNav({ su: true }))).toEqual(['You', 'Library', 'Devices', 'Accounts', 'Server'])
+      expect(groupLabels(mountNav({ su: true }))).toEqual(['You', 'Library', 'Devices', 'Accounts', 'Server', 'Custom Patches'])
     })
 
     it('shows the library group to a user who can manage libraries', () => {
-      expect(groupLabels(mountNav({ perms: ['manage_libraries'] }))).toEqual(['You', 'Library'])
+      expect(groupLabels(mountNav({ perms: ['manage_libraries'] }))).toEqual(['You', 'Library', 'Custom Patches'])
+    })
+
+    it('shows personal patch settings to readers and server controls to settings managers', async () => {
+      const reader = mountNav()
+      expect(itemLabels(reader)).toContain('Preferences')
+      expect(itemLabels(reader)).not.toContain('Server controls')
+      expect(await search(reader, 'membership hierarchy')).toContain('Preferences')
+      expect(itemLabels(mountNav({ perms: [Permission.ManageAppSettings] }))).toContain('Server controls')
     })
   })
 

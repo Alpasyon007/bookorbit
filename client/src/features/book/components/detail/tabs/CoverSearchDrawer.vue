@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search, Loader2, Image as ImageIcon, Check } from '@lucide/vue'
 import { COVER_SEARCH_FAILED_SOURCES_HEADER, DEFAULT_COVER_SEARCH_PROVIDER, type CoverSearchResult } from '@bookorbit/types'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCoverSearchPreferences } from '@/features/book/composables/useCoverSearchPreferences'
 import { useCoverSearchSources } from '@/features/book/composables/useCoverSearchSources'
+import { useAuth } from '@/features/auth/composables/useAuth'
 
 const props = defineProps<{
   open: boolean
@@ -15,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const { user } = useAuth()
 const { defaultProvider, load: loadCoverSearchPreferences } = useCoverSearchPreferences()
 const { sources, load: loadCoverSearchSources } = useCoverSearchSources()
 
@@ -34,6 +36,7 @@ const searchFailed = ref(false)
 const failedSources = ref<string[]>([])
 let openSequence = 0
 let activeSearch: AbortController | undefined
+let manualProviderSequence = 0
 
 const resultAspectClass = computed(() => (isAudiobookSearch.value ? 'aspect-square' : 'aspect-[2/3]'))
 const mediumSources = computed(() => sources.value.filter((source) => source.media.includes(isAudiobookSearch.value ? 'audio' : 'ebook')))
@@ -42,43 +45,67 @@ function availableProvider(key: string) {
   return key === 'all' || mediumSources.value.some((source) => source.key === key) ? key : DEFAULT_COVER_SEARCH_PROVIDER
 }
 
+function clearSearch() {
+  activeSearch?.abort()
+  activeSearch = undefined
+  isSearching.value = false
+  searchResults.value = []
+  hasSearched.value = false
+  searchFailed.value = false
+  failedSources.value = []
+}
+
 onMounted(() => {
   if (!props.open) void loadCoverSearchPreferences()
 })
 
+onUnmounted(() => {
+  openSequence++
+  clearSearch()
+})
+
 watch(
-  () => props.open,
-  async (val) => {
+  [() => props.open, () => user.value?.id],
+  async ([val]) => {
     const sequence = ++openSequence
-    activeSearch?.abort()
-    activeSearch = undefined
-    isSearching.value = false
+    clearSearch()
     if (!val) return
 
     searchTitle.value = props.initialTitle
     searchAuthor.value = props.initialAuthor
     isAudiobookSearch.value = props.isAudiobook
-    searchResults.value = []
-    hasSearched.value = false
-    searchFailed.value = false
-    failedSources.value = []
-
-    const openedWith = availableProvider(defaultProvider.value)
-    searchProvider.value = openedWith
+    const manual = manualProviderSequence
+    searchProvider.value = availableProvider(defaultProvider.value)
 
     await Promise.all([loadCoverSearchPreferences(), loadCoverSearchSources()])
-    if (sequence === openSequence && searchProvider.value === openedWith) searchProvider.value = availableProvider(defaultProvider.value)
+    if (sequence === openSequence && manual === manualProviderSequence) searchProvider.value = availableProvider(defaultProvider.value)
   },
   { immediate: true },
 )
 
+watch(mediumSources, (next, previous) => {
+  if (!props.open) return
+  if (availableProvider(searchProvider.value) !== searchProvider.value) {
+    searchProvider.value = availableProvider(defaultProvider.value)
+    clearSearch()
+  } else if (searchProvider.value === 'all' && previous.some(({ key }) => !next.some((source) => source.key === key))) {
+    clearSearch()
+  }
+})
+
+function markManualProvider() {
+  manualProviderSequence++
+}
+
 function toggleAudiobookSearch() {
+  markManualProvider()
   isAudiobookSearch.value = !isAudiobookSearch.value
   if (availableProvider(searchProvider.value) !== searchProvider.value) searchProvider.value = availableProvider(defaultProvider.value)
 }
 
 async function performSearch() {
-  if (!searchTitle.value.trim() || isSearching.value) return
+  if (!props.open || !searchTitle.value.trim() || isSearching.value) return
+  const provider = availableProvider(searchProvider.value)
   const request = new AbortController()
   activeSearch = request
   isSearching.value = true
@@ -91,7 +118,7 @@ async function performSearch() {
       title: searchTitle.value.trim(),
       author: searchAuthor.value.trim(),
       isAudiobook: String(isAudiobookSearch.value),
-      provider: searchProvider.value,
+      provider,
     })
     const res = await fetch(`/api/v1/books/cover/search?${params}`, { signal: request.signal })
     if (!res.ok) throw new Error('Search failed')
@@ -172,6 +199,7 @@ function handleOpenChange(val: boolean) {
               }}</label>
               <select
                 v-model="searchProvider"
+                @change="markManualProvider"
                 class="w-full h-9 md:h-10 rounded-lg border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               >
                 <option v-for="source in mediumSources" :key="source.key" :value="source.key">{{ source.label }}</option>

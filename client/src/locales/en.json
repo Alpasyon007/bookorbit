@@ -4346,6 +4346,104 @@
         }
       }
     },
+    "customPatches": {
+      "title": "Custom Patches",
+      "loadFailed": "Could not load custom patch settings.",
+      "saveFailed": "Could not save custom patch settings. Your edits are still here.",
+      "saving": "Saving changes…",
+      "unsaved": "Unsaved changes",
+      "saved": "Changes saved",
+      "restore": "Restore defaults",
+      "discard": "Discard changes",
+      "policyDisabled": "This feature is unavailable on this server. Your preferences are kept.",
+      "preferences": {
+        "nav": "Preferences",
+        "title": "Custom Patch Preferences",
+        "scope": "Customize these features for your account on this server. Changes take effect when you save."
+      },
+      "policy": {
+        "nav": "Server controls",
+        "title": "Custom Patch Server Controls",
+        "scope": "Choose which custom features are available to everyone on this server.",
+        "noPermission": "You do not have permission to manage these server controls.",
+        "availability": "Feature availability",
+        "fields": {
+          "seriesGridEnabled": { "label": "Make Series Grid available", "hint": "Users can choose Series Grid in library views." },
+          "sidebarCustomizationEnabled": {
+            "label": "Allow sidebar link customization",
+            "hint": "Users can choose which promotional and app links appear in their sidebar. Turning this off restores the app's original links for everyone."
+          },
+          "seriesRequestsEnabled": {
+            "label": "Make Series Requests available",
+            "hint": "Users with request access can browse and request released books from the Hardcover series catalog."
+          },
+          "extendedCoverSearchEnabled": {
+            "label": "Allow additional cover sources",
+            "hint": "Users with metadata editing access can search retailers and compatible metadata providers for covers."
+          }
+        }
+      },
+      "grid": {
+        "title": "Series Grid",
+        "enabled": "Show Series Grid",
+        "enabledHint": "Offer Series Grid as a library view.",
+        "hierarchy": "Membership priority",
+        "hierarchyOptions": { "forward": "First membership first", "reverse": "Last membership first" },
+        "hierarchyExamples": {
+          "forward": "For saved memberships Universe / Saga / Trilogy, the grid shows Universe → Saga → Trilogy. The grid uses the innermost membership for Series # sorting.",
+          "reverse": "For saved memberships Universe / Saga / Trilogy, the grid shows Trilogy → Saga → Universe. The grid uses the innermost membership for Series # sorting."
+        },
+        "groupOrder": "Sibling group order",
+        "groupHint": "Controls the order of headings at the same level. Books in each group still follow the library sort.",
+        "groupOptions": {
+          "library": "Follow library sort",
+          "library-reversed": "Reverse library group order",
+          "name-asc": "Series name A–Z",
+          "name-desc": "Series name Z–A"
+        },
+        "depth": "Maximum hierarchy depth",
+        "depthHint": "Deeper memberships are grouped under the last visible heading.",
+        "allLevels": "All levels",
+        "directBooks": "Books directly in a parent series",
+        "directBooksHint": "Place their Standalone group before or after the child series.",
+        "standalonePosition": "Books with no series",
+        "positionOptions": { "first": "First", "last": "Last" },
+        "standaloneLabel": "Standalone heading",
+        "standaloneLabelHint": "Applies to books with no series and books directly in a parent series. Leave blank to use the label in your app language.",
+        "headingIndent": "Child heading indentation",
+        "headingIndentHint": "Increase the inset per child level. Zero aligns all headings.",
+        "pixels": "{count} px",
+        "dividers": "Show heading dividers"
+      },
+      "sidebar": {
+        "title": "Sidebar",
+        "enabled": "Customize sidebar links",
+        "enabledHint": "Choose which extra links to show. Turning this off restores the app's original links. The sidebar still shows the version and any available update."
+      },
+      "requests": {
+        "title": "Series Requests",
+        "enabled": "Show Series Requests",
+        "enabledHint": "Browse the Hardcover series catalog from Book Requests when Hardcover is configured.",
+        "format": "Default series request format",
+        "formatOptions": { "ebook": "E-book", "audiobook": "Audiobook" },
+        "selection": "Initial book selection",
+        "selectionOptions": { "eligible": "Select all requestable books", "none": "Start with no books selected" },
+        "requestAll": "Show Request all released books",
+        "requestAllHint": "Offer a separate action that includes requestable books across all pages regardless of selection.",
+        "languageLink": "Open Book Requests to set request language",
+        "destinationsLink": "Manage request destinations",
+        "providerLink": "Configure the Hardcover metadata provider"
+      },
+      "covers": {
+        "title": "Cover Sources",
+        "enabled": "Use additional cover sources",
+        "enabledHint": "Include indexed retailer results and covers from compatible metadata providers.",
+        "metadata": "Use metadata providers for cover search",
+        "metadataHint": "Includes compatible providers already enabled on this server.",
+        "defaultSourceLink": "Change default cover search source",
+        "providersLink": "Manage metadata providers"
+      }
+    },
     "nav": {
       "title": "Settings",
       "ariaLabel": "Settings sections",
@@ -10533,6 +10631,8 @@
       "progress": "Created: {created}, joined: {joined}, skipped: {skipped}, unknown release dates: {unknown}.",
       "complete": "All catalog pages processed.",
       "selectedComplete": "Selected books processed.",
+      "settingsUnavailable": "Could not check the series request settings.",
+      "disabled": "Series requests are disabled.",
       "unknownDates": "Books without release dates were not requested; check them individually.",
       "failed": "The series request could not be completed.",
       "partial": "The series is only partially processed: {reason}. Retry to continue safely.",

@@ -8,8 +8,13 @@ const sourcesMock = await vi.hoisted(async () => {
   const { BUILT_IN_COVER_SEARCH_SOURCES } = await import('@bookorbit/types')
   return { sources: shallowRef(BUILT_IN_COVER_SEARCH_SOURCES), builtin: BUILT_IN_COVER_SEARCH_SOURCES, load: vi.fn<() => Promise<void>>() }
 })
+const authMock = await vi.hoisted(async () => {
+  const { ref } = await import('vue')
+  return { user: ref({ id: 7 }) }
+})
 
 vi.mock('@/features/book/composables/useCoverSearchSources', () => ({ useCoverSearchSources: () => sourcesMock }))
+vi.mock('@/features/auth/composables/useAuth', () => ({ useAuth: () => authMock }))
 
 const coverSearchPreferenceMock = await vi.hoisted(async () => {
   const { ref } = await import('vue')
@@ -99,6 +104,7 @@ type DrawerVm = {
 describe('CoverSearchDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    authMock.user.value = { id: 7 }
     coverSearchPreferenceMock.defaultProvider.value = 'duckduckgo'
     coverSearchPreferenceMock.isLoading.value = false
     coverSearchPreferenceMock.load.mockResolvedValue(true)
@@ -111,6 +117,18 @@ describe('CoverSearchDrawer', () => {
   })
 
   describe('default provider preference', () => {
+    it('falls back when a saved source is disabled without changing the saved preference', async () => {
+      coverSearchPreferenceMock.defaultProvider.value = 'foyles'
+      const wrapper = mountDrawer()
+      await flushPromises()
+      expect(wrapper.get('select').element.value).toBe('foyles')
+      sourcesMock.sources.value = sourcesMock.builtin.filter(({ key }) => key !== 'foyles')
+      await flushPromises()
+      expect(wrapper.get('select').element.value).toBe('duckduckgo')
+      expect(coverSearchPreferenceMock.defaultProvider.value).toBe('foyles')
+      wrapper.unmount()
+    })
+
     it('preloads the preference on mount so the provider is ready before the drawer opens', async () => {
       coverSearchPreferenceMock.defaultProvider.value = 'itunes'
 

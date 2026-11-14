@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '@/lib/api'
 import { useLibraries } from '@/features/library/composables/useLibraries'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
+import { useCustomPatchSettings } from '@/features/custom-patches/composables/useCustomPatchSettings'
 import { Permission } from '@bookorbit/types'
 import { requestLanguageOptions, useRequestDestinationDefault, useRequestLanguageDefault } from './useRequestDestinationDefault'
 import { useSeriesBookSelection } from './useSeriesBookSelection'
@@ -19,6 +20,10 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const { t, locale } = useI18n()
   const { libraries, fetchLibraries } = useLibraries()
   const { hasPermission } = usePermissions()
+  const { preferences, policy, loaded, loadFailed, load: loadPatchSettings } = useCustomPatchSettings()
+  const seriesEnabled = computed(() => policy.value.seriesRequestsEnabled && preferences.value.seriesRequests.enabled)
+  const settingsReady = computed(() => loaded.value || loadFailed.value)
+  const showRequestAll = computed(() => preferences.value.seriesRequests.showRequestAll)
   const { load: loadDestinations, defaultFor, resolveDestination } = useRequestDestinationDefault()
   const { load: loadLanguage, resolveLanguage } = useRequestLanguageDefault()
   const query = ref('')
@@ -35,7 +40,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const pageOffset = ref(0)
   const nextOffset = ref<number | null>(null)
   const previewLoaded = ref(false)
-  const mediaKind = ref<BookRequestMediaKind>('ebook')
+  const mediaKind = ref<BookRequestMediaKind>(preferences.value.seriesRequests.defaultFormat)
   const optionsReady = ref(false)
   const targetLibraryId = ref<number | null>(null)
   const targetFolderId = ref<number | null>(null)
@@ -77,6 +82,31 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   const progress = ref('')
   let disposed = false
   let previewVersion = 0
+  let formatEdited = false
+  let initializingFormat = false
+  watch(
+    mediaKind,
+    () => {
+      if (!initializingFormat) formatEdited = true
+    },
+    { flush: 'sync' },
+  )
+  watch(
+    () => preferences.value.seriesRequests.defaultFormat,
+    (format) => {
+      if (formatEdited || running.value) return
+      initializingFormat = true
+      mediaKind.value = format
+      initializingFormat = false
+    },
+  )
+  watch(
+    seriesEnabled,
+    (enabled) => {
+      if (!enabled && running.value) cancelled = true
+    },
+    { flush: 'sync' },
+  )
   onUnmounted(() => {
     disposed = true
   })
@@ -102,6 +132,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     return page
   }
   async function searchAt(offset: number) {
+    if (!seriesEnabled.value) return
     busy.value = true
     searching.value = true
     error.value = ''
@@ -125,15 +156,15 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     }
   }
   let appliedSeed = 0
-  watch([seed, busy], ([seed, isBusy]) => {
-    if (seed.name && seed.sequence !== appliedSeed && !isBusy) {
+  watch([seed, busy, settingsReady], ([seed, isBusy, ready]) => {
+    if (seed.name && seed.sequence !== appliedSeed && !isBusy && ready && seriesEnabled.value) {
       appliedSeed = seed.sequence
       query.value = seed.name
       handleSearch()
     }
   })
   function handleSearch() {
-    if (busy.value || query.value.trim().length < 2) return
+    if (!settingsReady.value || !seriesEnabled.value || busy.value || query.value.trim().length < 2) return
     clearSelection()
     submittedQuery.value = query.value.trim()
     hasSearched.value = false
@@ -149,7 +180,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     if (searchOffset.value !== null) void searchAt(searchOffset.value)
   }
   async function loadPage(offset: number, preserveError = false) {
-    if (!selected.value) return
+    if (!seriesEnabled.value || !selected.value) return
     const version = ++previewVersion
     const seriesId = selected.value.id
     const kind = mediaKind.value
@@ -175,7 +206,8 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   function clearSelection() {
     if (busy.value) return
     previewVersion++
-    selection.reset()
+    if (preferences.value.seriesRequests.initialSelection === 'none') selection.clear()
+    else selection.reset()
     selected.value = null
     books.value = []
     annotations.value = []
@@ -186,7 +218,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     error.value = ''
   }
   function selectSeries(series: SeriesCatalogSeries) {
-    if (busy.value) return
+    if (!settingsReady.value || !seriesEnabled.value || busy.value) return
     clearSelection()
     selected.value = series
     void loadPage(0)
@@ -273,10 +305,11 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
     await submitSeries(selection.snapshot())
   }
   async function requestAll() {
-    await submitSeries({ mode: 'all', excluded: new Set<string>(), selected: [] })
+    if (!showRequestAll.value) return
+    await submitSeries({ mode: 'all', excluded: new Set<string>(), selected: [] }, true)
   }
-  async function submitSeries(choice: { mode: 'all' | 'explicit'; excluded: Set<string>; selected: SeriesCatalogBook[] }) {
-    if (!selected.value || busy.value || !optionsReady.value || destinationMissing.value) return
+  async function submitSeries(choice: { mode: 'all' | 'explicit'; excluded: Set<string>; selected: SeriesCatalogBook[] }, requestAllAction = false) {
+    if (!settingsReady.value || !seriesEnabled.value || !selected.value || busy.value || !optionsReady.value || destinationMissing.value) return
     if (choice.mode === 'explicit' && choice.selected.length === 0) return
     busy.value = true
     running.value = true
@@ -296,7 +329,13 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
       progress.value = t('bookRequests.series.progress', { created, joined, skipped, unknown })
     }
     const assertActive = () => {
+      if (!seriesEnabled.value || (requestAllAction && !showRequestAll.value)) throw new Error(t('bookRequests.series.disabled'))
       if (cancelled) throw new Error(t('bookRequests.series.stopped'))
+    }
+    const refreshSettings = async () => {
+      assertActive()
+      if (!(await loadPatchSettings({ refresh: true }))) throw new Error(t('bookRequests.series.settingsUnavailable'))
+      assertActive()
     }
     async function submitBatch(items: SeriesCatalogBook[]) {
       const seen = new Set<string>()
@@ -354,7 +393,8 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
       if (choice.mode === 'explicit') {
         for (let i = 0; i < choice.selected.length; i += 25) {
           if (disposed) return
-          assertActive()
+          await refreshSettings()
+          if (disposed) return
           await submitBatch(choice.selected.slice(i, i + 25))
           if (disposed) return
           assertActive()
@@ -362,6 +402,8 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
         }
       } else {
         do {
+          await refreshSettings()
+          if (disposed) return
           const page: SeriesCatalogPage<SeriesCatalogBook> = await readPage(
             `/api/v1/book-requests/series-catalog/${series.id}?offset=${offset}`,
             offset,
@@ -392,7 +434,7 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
         running.value = false
       }
       onSubmitted()
-      if (!disposed && selected.value?.id === series.id) void loadPage(pageOffset.value, true)
+      if (!disposed && seriesEnabled.value && selected.value?.id === series.id) void loadPage(pageOffset.value, true)
     }
   }
 
@@ -403,6 +445,9 @@ export function useSeriesRequests(seed: () => { name: string; sequence: number }
   return {
     running,
     stop,
+    seriesEnabled,
+    settingsReady,
+    showRequestAll,
     optionsReady,
     libraries,
     folders,

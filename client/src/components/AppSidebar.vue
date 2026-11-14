@@ -256,7 +256,7 @@ async function onLibrarySaved(library: Library) {
 
     <SidebarCustomizeBar v-if="isCustomizing && !isSettingsRoute" />
     <SidebarDock v-else :is-rail="isRail" :is-mobile="isMobile" @navigate="handleNavigate" />
-    <SidebarFooterBar v-if="!isSettingsRoute" @navigate="handleNavigate" />
+    <SidebarFooterBar v-if="!isSettingsRoute" :is-rail="isRail" @navigate="handleNavigate" />
 
     <SidebarRail />
   </Sidebar>

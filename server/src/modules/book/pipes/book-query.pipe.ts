@@ -5,12 +5,14 @@ import { MAX_RANDOM_SORT_SEED, isSortField, type BookQuery, type JumpBucketsQuer
 
 import { MAX_BOOK_QUERY_OFFSET_ROWS, isBookQueryOffsetWithinLimit } from '../../../common/constants/pagination.constants';
 import { groupRuleSchema } from '../utils/group-rule.validator';
+import { seriesGridOptionsSchema } from '../../../common/utils/series-grid-options.schema';
 
 const sortFieldSchema = z.custom<SortField>((value) => typeof value === 'string' && isSortField(value), { message: 'Unsupported sort field' });
 
 const bookQuerySchema = z.object({
   collapseSeries: z.boolean().optional(),
   groupBySeries: z.boolean().optional(),
+  seriesGridOptions: seriesGridOptionsSchema.optional(),
   collapseLinked: z.boolean().optional(),
   filter: groupRuleSchema(5).optional(),
   q: z.string().max(200).optional(),

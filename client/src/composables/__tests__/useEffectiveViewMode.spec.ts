@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { ref } from 'vue'
 
 const mockStorage: Record<string, string> = {}
 
@@ -63,5 +64,15 @@ describe('useEffectiveViewMode', () => {
     expect(collection.viewMode.value).toBe('grid')
     expect(collection.effectiveViewMode.value).toBe('grid')
     expect(library.viewMode.value).toBe('series-grid')
+  })
+
+  it('falls back without replacing the remembered Series Grid choice when access changes', () => {
+    const allowed = ref(true)
+    const { viewMode, effectiveViewMode } = useEffectiveViewMode({ allowSeriesGrid: allowed })
+    viewMode.value = 'series-grid'
+    allowed.value = false
+    expect(effectiveViewMode.value).toBe('grid')
+    allowed.value = true
+    expect(effectiveViewMode.value).toBe('series-grid')
   })
 })

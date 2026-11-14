@@ -104,4 +104,6 @@ export * from "./delivery";
 export * from "./djvu";
 export * from "./email";
 
-export * from './series-catalog';
+export * from "./series-catalog";
+
+export * from "./custom-patches";

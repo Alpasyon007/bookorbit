@@ -517,6 +517,23 @@ export const routes: RouteRecordRaw[] = [
             meta: { maxWidth: 'max-w-[96rem]', title: () => t('titles.system.audit-log') },
           },
 
+          {
+            path: 'custom-patches',
+            name: 'settings-custom-patches',
+            component: () => import('@/features/custom-patches/CustomPatchPreferences.vue'),
+            meta: { title: () => t('settings.customPatches.preferences.title') },
+          },
+          {
+            path: 'custom-patches/server',
+            name: 'settings-custom-patches-server',
+            component: () => import('@/features/custom-patches/CustomPatchPolicy.vue'),
+            meta: {
+              requiredPermission: Permission.ManageAppSettings,
+              permissionFallback: 'settings-custom-patches',
+              title: () => t('settings.customPatches.policy.title'),
+            },
+          },
+
           // ── Legacy deep links: keep every pre-rail URL working ──────────────
           { path: 'notifications', redirect: { name: 'settings-notifications' } },
           {

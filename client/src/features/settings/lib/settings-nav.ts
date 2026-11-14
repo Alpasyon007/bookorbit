@@ -566,6 +566,33 @@ export const SETTINGS_NAV: readonly SettingsNavGroup[] = [
       },
     ],
   },
+  {
+    id: 'custom-patches',
+    labelKey: 'settings.customPatches.title',
+    icon: Wrench,
+    items: [
+      {
+        id: 'custom-patch-preferences',
+        routeName: 'settings-custom-patches',
+        labelKey: 'settings.customPatches.preferences.nav',
+        titleKey: 'settings.customPatches.preferences.title',
+        descriptionKey: 'settings.customPatches.preferences.scope',
+        icon: SlidersHorizontal,
+        keywords:
+          'patch feature series grid membership priority hierarchy child series sort reverse standalone sidebar promotions request cover sources',
+      },
+      {
+        id: 'custom-patch-policy',
+        routeName: 'settings-custom-patches-server',
+        labelKey: 'settings.customPatches.policy.nav',
+        titleKey: 'settings.customPatches.policy.title',
+        descriptionKey: 'settings.customPatches.policy.scope',
+        icon: ShieldCheck,
+        keywords: 'patch availability instance policy all users series grid sidebar requests cover sources',
+        isVisible: anyPermission(Permission.ManageAppSettings),
+      },
+    ],
+  },
 ]
 
 function isItemVisible(item: SettingsNavItem, context: SettingsNavContext): boolean {

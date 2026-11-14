@@ -280,6 +280,20 @@ describe('RequestSearchPanel provider sources', () => {
     expect(state.search).toHaveBeenLastCalledWith({ title: undefined, author: 'Terry Pratchett', mediaKind: 'ebook', resultsPerProvider: 20 })
   })
 
+  it('offers a series search only when the feature is enabled', async () => {
+    const first = state.groups.value[0]!
+    first.candidates[0]!.seriesName = 'The Shepherd King'
+    const wrapper = await render()
+    const shortcut = () => wrapper.findAll('button').find((button) => button.text().includes('The Shepherd King'))
+    expect(shortcut()).toBeUndefined()
+    await wrapper.setProps({ seriesSearchEnabled: true })
+    await shortcut()!.trigger('click')
+    expect(wrapper.emitted('seriesSearch')).toEqual([['The Shepherd King']])
+    await wrapper.setProps({ seriesSearchEnabled: false })
+    expect(shortcut()).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('searches for an author alone when their name on a result is pressed', async () => {
     const scrollIntoView = vi.fn<() => void>()
     Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView })

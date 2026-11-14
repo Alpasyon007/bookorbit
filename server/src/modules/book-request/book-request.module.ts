@@ -6,6 +6,7 @@ import { AppSettingsModule } from '../app-settings/app-settings.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
 import { BookDockModule } from '../book-dock/book-dock.module';
+import { CustomPatchSettingsModule } from '../custom-patches/custom-patch-settings.module';
 import { LibraryModule } from '../library/library.module';
 import { NotificationModule } from '../notification/notification.module';
 import { UploadModule } from '../upload/upload.module';
@@ -82,6 +83,7 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
     AppSettingsModule,
     AuditModule,
     BookDockModule,
+    CustomPatchSettingsModule,
     UploadModule,
     AuthModule,
     UserModule,

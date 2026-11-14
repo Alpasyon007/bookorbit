@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-defineProps<{ isRail: boolean }>()
+withDefaults(defineProps<{ isRail: boolean; showIos?: boolean; showAndroid?: boolean }>(), { showIos: true, showAndroid: true })
 
 const { t } = useI18n()
 
@@ -18,7 +18,7 @@ const ANDROID_LOGO_PATH =
 
 <template>
   <div class="flex items-center group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
-    <Tooltip>
+    <Tooltip v-if="showIos">
       <TooltipTrigger as-child>
         <Button as-child variant="ghost" size="icon" class="size-[26px] rounded-md text-sidebar-foreground hover:bg-(--shell-accent-wash)">
           <a :href="IOS_APP_STORE_URL" target="_blank" rel="noopener noreferrer" :aria-label="t('components.sidebar.appLinks.ios')">
@@ -31,7 +31,7 @@ const ANDROID_LOGO_PATH =
       <TooltipContent :side="isRail ? 'right' : 'top'">{{ t('components.sidebar.appLinks.ios') }}</TooltipContent>
     </Tooltip>
 
-    <Tooltip>
+    <Tooltip v-if="showAndroid">
       <TooltipTrigger as-child>
         <Button
           variant="ghost"

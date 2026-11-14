@@ -50,5 +50,57 @@
     "allowDefault": false,
     "useGuards": [],
     "apiKey": "read"
+  },
+  {
+    "file": "server/src/modules/custom-patches/custom-patch-settings.controller.ts",
+    "className": "CustomPatchSettingsController",
+    "methodName": "getPreferences",
+    "httpMethod": "GET",
+    "path": "/custom-patches/preferences",
+    "permissions": [],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
+  },
+  {
+    "file": "server/src/modules/custom-patches/custom-patch-settings.controller.ts",
+    "className": "CustomPatchSettingsController",
+    "methodName": "setPreferences",
+    "httpMethod": "PUT",
+    "path": "/custom-patches/preferences",
+    "permissions": [],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "write"
+  },
+  {
+    "file": "server/src/modules/custom-patches/custom-patch-settings.controller.ts",
+    "className": "CustomPatchSettingsController",
+    "methodName": "getPolicy",
+    "httpMethod": "GET",
+    "path": "/custom-patches/policy",
+    "permissions": [],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
+  },
+  {
+    "file": "server/src/modules/custom-patches/custom-patch-settings.controller.ts",
+    "className": "CustomPatchSettingsController",
+    "methodName": "setPolicy",
+    "httpMethod": "PUT",
+    "path": "/custom-patches/policy",
+    "permissions": ["Permission.ManageAppSettings"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "write"
   }
 ]

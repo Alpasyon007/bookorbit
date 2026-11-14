@@ -8,12 +8,14 @@ import CommandPalette from '@/features/command-palette/components/CommandPalette
 import BookMetadataFetchWidget from '@/features/book-metadata-fetch/components/BookMetadataFetchWidget.vue'
 import { useAppStyleScope } from '@/composables/useAppStyleScope'
 import { useShellServices } from '@/composables/useShellServices'
+import { useCustomPatchSettings } from '@/features/custom-patches/composables/useCustomPatchSettings'
 import { useThemeStore } from '@/stores/theme'
 
 const route = useRoute()
 const themeStore = useThemeStore()
 useAppStyleScope()
 useShellServices()
+useCustomPatchSettings()
 
 const BOOK_ROUTE_NAMES = new Set(['book-detail'])
 

@@ -3,6 +3,7 @@ import { BookModule } from '../book/book.module';
 import { AppSettingsModule } from '../app-settings/app-settings.module';
 import { BookCoverStoreModule } from '../book-cover-store/book-cover-store.module';
 import { BookMetadataLockModule } from '../book-metadata-lock/book-metadata-lock.module';
+import { CustomPatchSettingsModule } from '../custom-patches/custom-patch-settings.module';
 import { FileWriteModule } from '../file-write/file-write.module';
 import { LibraryModule } from '../library/library.module';
 import { MetadataModule } from '../metadata/metadata.module';
@@ -27,6 +28,7 @@ const PROVIDER_CLASSES = [DuckDuckGoCoverProvider, ITunesCoverProvider, Audioboo
     BookModule,
     BookCoverStoreModule,
     BookMetadataLockModule,
+    CustomPatchSettingsModule,
     FileWriteModule,
     LibraryModule,
     MetadataModule,

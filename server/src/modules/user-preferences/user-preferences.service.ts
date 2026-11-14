@@ -222,6 +222,14 @@ export class UserPreferencesService {
 
   constructor(private readonly repo: UserPreferencesRepository) {}
 
+  async getCustomPatchSettings(userId: number): Promise<unknown | null> {
+    return (await this.repo.findByCategory(userId, 'custom-patches'))?.data ?? null;
+  }
+
+  async setCustomPatchSettings(userId: number, settings: Record<string, unknown>): Promise<void> {
+    await this.repo.upsert(userId, 'custom-patches', settings);
+  }
+
   async getWhatsNewPreferences(userId: number): Promise<WhatsNewPreferences> {
     const row = await this.repo.findByCategory(userId, 'whats-new');
     if (!row) return { ...WHATS_NEW_DEFAULTS };

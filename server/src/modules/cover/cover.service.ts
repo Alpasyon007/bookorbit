@@ -37,13 +37,16 @@ export class CoverService {
     private readonly coverStore: BookCoverStore,
   ) {}
 
-  listCoverSources() {
-    return this.providerRegistry.list();
+  listCoverSources(userId: number) {
+    return this.providerRegistry.list(userId);
   }
 
-  async searchCovers(params: CoverSearchParams & { provider?: string }): Promise<{ results: CoverSearchResult[]; failedSources: string[] }> {
+  async searchCovers(
+    params: CoverSearchParams & { provider?: string },
+    userId: number,
+  ): Promise<{ results: CoverSearchResult[]; failedSources: string[] }> {
     const { provider, ...searchParams } = params;
-    const providers = await this.providerRegistry.select(provider, searchParams.isAudiobook);
+    const providers = await this.providerRegistry.select(userId, provider, searchParams.isAudiobook);
     const signal = provider === COVER_PROVIDER_ALL_KEY ? AbortSignal.timeout(ALL_COVER_SEARCH_TIMEOUT_MS) : undefined;
     const outputs = await mapWithConcurrency(providers, COVER_SEARCH_CONCURRENCY, async (coverProvider) => {
       if (signal?.aborted) return { results: [], failed: true };

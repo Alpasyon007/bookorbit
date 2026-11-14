@@ -1,7 +1,15 @@
 import { defineComponent, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BookCard, BooksPage, GroupRule, JumpBucket, SortSpec } from '@bookorbit/types'
+import {
+  DEFAULT_CUSTOM_PATCH_PREFERENCES,
+  type BookCard,
+  type BooksPage,
+  type GroupRule,
+  type JumpBucket,
+  type SeriesGridOptions,
+  type SortSpec,
+} from '@bookorbit/types'
 import { COLLECTION_DEFAULT_SORT } from '../../lib/sort-defaults'
 
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>()
@@ -102,6 +110,7 @@ function setup(
     enabled?: boolean
     defaultSort?: SortSpec[]
     collapseLinked?: boolean
+    seriesGridOptions?: SeriesGridOptions
   } = {},
 ) {
   const scopeId = ref<number | null>(options.scope === undefined ? 1 : options.scope)
@@ -112,11 +121,13 @@ function setup(
   const selectionMode = ref(options.selectionMode ?? false)
   const collapseEnabled = useEffectiveSeriesCollapse(collapsePreference, selectionMode)
   const q = ref(options.q ?? '')
+  const seriesGridOptions = options.seriesGridOptions ? ref(options.seriesGridOptions) : undefined
   const win = useBookViewWindow({
     scopeId,
     listEndpoint: (id) => `/api/v1/libraries/${id}/books`,
     bucketsEndpoint: (id) => `/api/v1/libraries/${id}/books/jump-buckets`,
     viewMode,
+    seriesGridOptions,
     railEnabled,
     collapseEnabled,
     q,
@@ -124,7 +135,7 @@ function setup(
     defaultSort: options.defaultSort,
     collapseLinked: options.collapseLinked,
   })
-  return { win, scopeId, viewMode, railEnabled, enabled, collapsePreference, selectionMode, collapseEnabled, q }
+  return { win, scopeId, viewMode, railEnabled, enabled, collapsePreference, selectionMode, collapseEnabled, q, seriesGridOptions }
 }
 
 function listRequests(): number[] {
@@ -194,6 +205,22 @@ describe('useBookViewWindow', () => {
     await flush()
     expect(listRequestBodies().at(-1)).toHaveProperty('collapseSeries', true)
     expect(listRequestBodies().at(-1)).not.toHaveProperty('groupBySeries')
+  })
+
+  it('reissues grouped pages when the hierarchy and heading order change', async () => {
+    mockApi(5)
+    const { win, viewMode, seriesGridOptions } = setup({ viewMode: 'series-grid', seriesGridOptions: DEFAULT_CUSTOM_PATCH_PREFERENCES.seriesGrid })
+    await flush()
+    const next = { ...seriesGridOptions!.value, hierarchyOrder: 'reverse', groupOrder: 'name-desc' } as const
+    seriesGridOptions!.value = next
+    await flush()
+    expect(listRequestBodies().at(-1)).toMatchObject({ groupBySeries: true, seriesGridOptions: next, pagination: { page: 0, size: 100 } })
+    expect(fetchMock.mock.calls[0]![1]?.signal?.aborted).toBe(true)
+    expect(win.query.value).toMatchObject({ seriesGridOptions: next })
+
+    viewMode.value = 'grid'
+    await flush()
+    expect(listRequestBodies().at(-1)).not.toHaveProperty('seriesGridOptions')
   })
 
   it('replaces grouped cards and paths when the filter and ordered sort levels change during a fetch', async () => {

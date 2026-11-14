@@ -165,6 +165,30 @@ describe('VirtualBookGrid', () => {
     expect(wrapper.findAll('[data-testid="book-card"]')).toHaveLength(102)
   })
 
+  it('applies heading preferences to global and nested Standalone while keeping accessible depth', () => {
+    const parent = { key: 'series:1', label: 'Parent' }
+    const direct = { key: DIRECT_SERIES_BOOKS_KEY, label: null }
+    const standalone = { key: 'none', label: null }
+    const wrapper = mount(VirtualBookGrid, {
+      props: {
+        books: [makeBook(1), makeBook(2)],
+        coverSize: 120,
+        gridGap: 12,
+        seriesGridBlocks: [[[parent, direct], [standalone]]],
+        seriesGridStandaloneLabel: 'Single titles',
+        seriesGridHeadingIndent: 12,
+        seriesGridShowDividers: false,
+      },
+    })
+    expect(wrapper.findAll('h2, h3').map((heading) => [heading.element.tagName, heading.text()])).toEqual([
+      ['H2', 'Parent'],
+      ['H3', 'Single titles'],
+      ['H2', 'Single titles'],
+    ])
+    expect(wrapper.get('h3').classes()).toContain('border-transparent')
+    expect(wrapper.get('h3').element.parentElement?.style.paddingInlineStart).toBe('12px')
+  })
+
   it('asks for the immediately preceding server page at a distant grouped range', () => {
     const books = Array.from({ length: 202 }, (_, index) => makeBook(index + 1))
     const wrapper = mount(VirtualBookGrid, { props: { books, coverSize: 120, gridGap: 12, seriesGridBlocks: [] } })

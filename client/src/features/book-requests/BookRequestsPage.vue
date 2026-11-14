@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { useAuth } from '@/features/auth/composables/useAuth'
+import { useCustomPatchSettings } from '@/features/custom-patches/composables/useCustomPatchSettings'
 import { formatCompactNumber, formatNumber } from '@/i18n/formatters'
 import { canBulkActRequest, canDismissRequest, cancelStopsATransfer } from './requestActions'
 import { flattenRequestRows, rowRequests } from './requestPair'
@@ -43,6 +44,13 @@ const route = useRoute()
 const router = useRouter()
 const { hasPermission } = usePermissions()
 const { user } = useAuth()
+const { preferences: patchPreferences, policy: patchPolicy, loaded: patchSettingsLoaded, loadFailed: patchSettingsFailed } = useCustomPatchSettings()
+const seriesSearchEnabled = computed(
+  () =>
+    (patchSettingsLoaded.value || patchSettingsFailed.value) &&
+    patchPolicy.value.seriesRequestsEnabled &&
+    patchPreferences.value.seriesRequests.enabled,
+)
 
 const canManage = computed(() => hasPermission(Permission.ManageBookRequests))
 const canSelfFulfil = computed(() => hasPermission(Permission.BookRequestSelfFulfill))
@@ -554,6 +562,7 @@ function handleFilterChange() {
 const seriesSeed = ref({ name: '', sequence: 0 })
 const seriesPanel = ref<InstanceType<typeof SeriesRequestPanel> | null>(null)
 function handleSeriesSearch(name: string) {
+  if (!seriesSearchEnabled.value) return
   seriesSeed.value = { name, sequence: seriesSeed.value.sequence + 1 }
   seriesPanel.value?.focusSearch()
 }
@@ -618,7 +627,7 @@ function goToNextPage() {
       is capped rather than centred, so switching tabs does not shift the content sideways.
     -->
     <section v-if="activeTab === 'search'" id="requests-panel-search" role="tabpanel" aria-labelledby="requests-tab-search" class="w-full max-w-5xl">
-      <RequestSearchPanel @submitted="handleSubmitted" @series-search="handleSeriesSearch" />
+      <RequestSearchPanel :series-search-enabled="seriesSearchEnabled" @submitted="handleSubmitted" @series-search="handleSeriesSearch" />
       <SeriesRequestPanel :key="user?.id ?? 'anonymous'" ref="seriesPanel" :seed="seriesSeed" :on-acknowledged="handleSubmitted" />
     </section>
 

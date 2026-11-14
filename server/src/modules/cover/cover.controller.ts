@@ -17,19 +17,22 @@ export class CoverController {
 
   @Get('cover/sources')
   @RequirePermission(Permission.LibraryEditMetadata)
-  listCoverSources() {
-    return this.coverService.listCoverSources();
+  listCoverSources(@CurrentUser() user: RequestUser) {
+    return this.coverService.listCoverSources(user.id);
   }
 
   @Get('cover/search')
   @RequirePermission(Permission.LibraryEditMetadata)
-  async searchCovers(@Query() query: SearchCoversQueryDto, @Res({ passthrough: true }) response: FastifyReply) {
-    const { results, failedSources } = await this.coverService.searchCovers({
-      title: query.title,
-      author: query.author,
-      isAudiobook: query.isAudiobook,
-      provider: query.provider,
-    });
+  async searchCovers(@Query() query: SearchCoversQueryDto, @Res({ passthrough: true }) response: FastifyReply, @CurrentUser() user: RequestUser) {
+    const { results, failedSources } = await this.coverService.searchCovers(
+      {
+        title: query.title,
+        author: query.author,
+        isAudiobook: query.isAudiobook,
+        provider: query.provider,
+      },
+      user.id,
+    );
     if (failedSources.length) response.header(COVER_SEARCH_FAILED_SOURCES_HEADER, failedSources.join(','));
     return results;
   }

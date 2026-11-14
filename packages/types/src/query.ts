@@ -1,3 +1,4 @@
+import type { SeriesGridOptions } from "./custom-patches";
 import type { CustomMetadataFieldType } from "./custom-metadata";
 import type { CommunityRatingProviderKey } from "./metadata-fetch";
 
@@ -400,6 +401,7 @@ export type BookQuery = {
   collapseSeries?: boolean;
   /** Keep primary-series cards contiguous, applying the requested sort inside each group. */
   groupBySeries?: boolean;
+  seriesGridOptions?: SeriesGridOptions;
   /**
    * Fold linked books into one card per group (the lead, else a stable representative). Released
    * clients never send it, so their lists keep every book.

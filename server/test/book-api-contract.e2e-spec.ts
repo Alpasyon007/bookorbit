@@ -5,7 +5,7 @@ import { readdir, rm, stat } from 'fs/promises';
 import { join } from 'path';
 
 import * as unzipper from 'unzipper';
-import { Permission, type BooksPage } from '@bookorbit/types';
+import { DEFAULT_CUSTOM_PATCH_POLICY, DEFAULT_CUSTOM_PATCH_PREFERENCES, Permission, type BooksPage } from '@bookorbit/types';
 
 import { appSettings } from '../src/db/schema/auth';
 import { bookCovers } from '../src/db/schema/book-covers';
@@ -276,6 +276,42 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       const shuffledAgain = await list(shuffledQuery);
       expect(shuffled.items.map((card) => card.id)).toEqual(shuffledAgain.items.map((card) => card.id));
       expect(shuffled.items.at(-1)!.id).toBe(standalone);
+      const gridOptions = {
+        hierarchyOrder: 'forward',
+        groupOrder: 'name-asc',
+        maxDepth: 0,
+        directBooksPosition: 'first',
+        standalonePosition: 'first',
+      };
+      const alphabetical = await list({ ...query, seriesGridOptions: gridOptions });
+      expect(alphabetical.items.map((card) => card.id)).toEqual([standalone, other, parent, child, deep]);
+      const depthLimitedIndex = await list({
+        groupBySeries: true,
+        sort: [{ field: 'seriesIndex', dir: 'asc' }],
+        seriesGridOptions: { ...gridOptions, maxDepth: 2, directBooksPosition: 'last', standalonePosition: 'last' },
+      });
+      expect(depthLimitedIndex.items.findIndex((card) => card.id === child)).toBeLessThan(
+        depthLimitedIndex.items.findIndex((card) => card.id === deep),
+      );
+      const reversedNames = await list({
+        ...query,
+        seriesGridOptions: { ...gridOptions, groupOrder: 'name-desc', directBooksPosition: 'last', standalonePosition: 'last' },
+      });
+      expect(reversedNames.items.map((card) => card.id)).toEqual([deep, child, parent, other, standalone]);
+      const reversedLibrary = await list({
+        ...query,
+        seriesGridOptions: { ...gridOptions, groupOrder: 'library-reversed', standalonePosition: 'last', directBooksPosition: 'last' },
+      });
+      expect(reversedLibrary.items.map((card) => card.id)).toEqual([deep, child, parent, other, standalone]);
+      const reversedPath = await list({ ...query, seriesGridOptions: { ...gridOptions, hierarchyOrder: 'reverse', maxDepth: 2 } });
+      const deepPath = reversedPath.items.find((card) => card.id === deep)?.seriesGroupPath;
+      expect(deepPath).toEqual([series[3], series[2]].map((row) => ({ key: `series:${row!.id}`, label: row!.name })));
+      const reversePages = await Promise.all(
+        [0, 1, 2, 3, 4].map((page) =>
+          list({ ...query, seriesGridOptions: { ...gridOptions, hierarchyOrder: 'reverse', maxDepth: 2 }, pagination: { page, size: 1 } }),
+        ),
+      );
+      expect(reversePages.flatMap((page) => page.items).map((card) => card.id)).toEqual(reversedPath.items.map((card) => card.id));
       const secondChild = await seed('Echo nested', [0, 4], '1', 2000);
       const secondParent = await seed('Foxtrot nested', [0], null, 2000);
       const siblings = await list({ groupBySeries: true, sort: [{ field: 'title', dir: 'desc' }] });
@@ -388,6 +424,74 @@ describe('Series Grid canonical author ordering (e2e)', { timeout: SCENARIO_TIME
           people.map((row) => row.id),
         ),
       );
+      await closeMetadataWriteE2EContext(ctx);
+    }
+  });
+});
+
+describe('Custom patch settings access (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
+  it('isolates personal settings and enforces server availability without blocking ordinary browsing', async () => {
+    const ctx = await createMetadataWriteE2EContext();
+    const library = await createLibraryWithFolder(ctx);
+    const first = await createUserAndLogin(ctx);
+    const second = await createUserAndLogin(ctx);
+    await grantLibraryAccess(ctx, first.userId, library.libraryId, 'viewer');
+    const personalPath = '/api/v1/custom-patches/preferences';
+    const policyPath = '/api/v1/custom-patches/policy';
+    const adminHeaders = authHeader(ctx.adminToken);
+    const firstHeaders = authHeader(first.accessToken);
+    const secondHeaders = authHeader(second.accessToken);
+    try {
+      const anonymous = await ctx.app.inject({ method: 'GET', url: personalPath });
+      expect(anonymous.statusCode).toBe(401);
+      const defaults = await ctx.app.inject({ method: 'GET', url: personalPath, headers: firstHeaders });
+      expect(defaults.json()).toEqual({ settings: DEFAULT_CUSTOM_PATCH_PREFERENCES });
+      const settings = structuredClone(DEFAULT_CUSTOM_PATCH_PREFERENCES);
+      settings.seriesGrid.hierarchyOrder = 'reverse';
+      const saved = await ctx.app.inject({ method: 'PUT', url: personalPath, headers: firstHeaders, payload: { settings } });
+      expect(saved.statusCode, saved.body).toBe(204);
+      expect((await ctx.app.inject({ method: 'GET', url: personalPath, headers: firstHeaders })).json().settings.seriesGrid.hierarchyOrder).toBe(
+        'reverse',
+      );
+      expect((await ctx.app.inject({ method: 'GET', url: personalPath, headers: secondHeaders })).json().settings.seriesGrid.hierarchyOrder).toBe(
+        'forward',
+      );
+      const invalid = await ctx.app.inject({
+        method: 'PUT',
+        url: personalPath,
+        headers: firstHeaders,
+        payload: { settings: { ...settings, version: 2 } },
+      });
+      expect(invalid.statusCode).toBe(400);
+      const denied = await ctx.app.inject({
+        method: 'PUT',
+        url: policyPath,
+        headers: firstHeaders,
+        payload: { settings: DEFAULT_CUSTOM_PATCH_POLICY },
+      });
+      expect(denied.statusCode).toBe(403);
+      const disabled = { ...DEFAULT_CUSTOM_PATCH_POLICY, seriesGridEnabled: false };
+      const changed = await ctx.app.inject({ method: 'PUT', url: policyPath, headers: adminHeaders, payload: { settings: disabled } });
+      expect(changed.statusCode, changed.body).toBe(204);
+      const grouped = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/v1/libraries/${library.libraryId}/books`,
+        headers: firstHeaders,
+        payload: { groupBySeries: true },
+      });
+      expect(grouped.statusCode).toBe(403);
+      const flat = await ctx.app.inject({ method: 'POST', url: `/api/v1/libraries/${library.libraryId}/books`, headers: firstHeaders, payload: {} });
+      expect(flat.statusCode, flat.body).toBe(201);
+      const bypass = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/app-settings/fork.custom-patches.policy.v1',
+        headers: adminHeaders,
+        payload: { value: '{}' },
+      });
+      expect(bypass.statusCode).toBe(400);
+    } finally {
+      await ctx.app.inject({ method: 'PUT', url: policyPath, headers: adminHeaders, payload: { settings: DEFAULT_CUSTOM_PATCH_POLICY } });
+      await ctx.db.delete(libraries).where(eq(libraries.id, library.libraryId));
       await closeMetadataWriteE2EContext(ctx);
     }
   });

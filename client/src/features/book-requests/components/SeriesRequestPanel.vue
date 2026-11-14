@@ -25,6 +25,9 @@ defineExpose({ focusSearch })
 const {
   running,
   stop,
+  seriesEnabled,
+  settingsReady,
+  showRequestAll,
   optionsReady,
   libraries,
   folders,
@@ -72,7 +75,7 @@ const {
   availabilityLabel,
 } = useSeriesRequests(() => props.seed, props.onAcknowledged)
 
-const canSearch = computed(() => query.value.trim().length >= 2)
+const canSearch = computed(() => settingsReady.value && query.value.trim().length >= 2)
 const optionsDisabled = computed(() => busy.value || !optionsReady.value)
 const hasCatalog = computed(() => previewLoaded.value && (books.value.length > 0 || pageOffset.value > 0 || nextOffset.value !== null))
 const selectionText = computed(() => {
@@ -112,13 +115,17 @@ async function backToResults() {
 </script>
 
 <template>
-  <section class="mt-6 space-y-3" aria-labelledby="series-search-title">
+  <section v-if="(settingsReady && seriesEnabled) || running || progress || error" class="mt-6 space-y-3" aria-labelledby="series-search-title">
     <div class="space-y-1">
       <h2 id="series-search-title" class="text-base font-semibold text-foreground">{{ t('bookRequests.series.title') }}</h2>
-      <p class="text-sm text-muted-foreground">{{ t('bookRequests.series.help') }}</p>
+      <p v-if="seriesEnabled" class="text-sm text-muted-foreground">{{ t('bookRequests.series.help') }}</p>
     </div>
 
-    <form class="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center" @submit.prevent="handleSearch">
+    <form
+      v-if="seriesEnabled"
+      class="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center"
+      @submit.prevent="handleSearch"
+    >
       <div class="relative min-w-0 flex-1">
         <Search :size="15" class="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <label for="series-query" class="sr-only">{{ t('bookRequests.series.search') }}</label>
@@ -142,7 +149,7 @@ async function backToResults() {
 
     <p v-if="searching" role="status" class="sr-only">{{ t('bookRequests.search.searching') }}</p>
 
-    <template v-if="!selected">
+    <template v-if="seriesEnabled && !selected">
       <ul v-if="results.length" class="space-y-2">
         <li v-for="series in results" :key="series.id">
           <Button
@@ -178,7 +185,7 @@ async function backToResults() {
       </div>
     </template>
 
-    <div v-else class="overflow-hidden rounded-xl border border-border bg-card">
+    <div v-else-if="seriesEnabled && selected" class="overflow-hidden rounded-xl border border-border bg-card">
       <div class="space-y-2 p-3 sm:p-4">
         <Button type="button" variant="ghost" size="sm" class="-ms-1 text-muted-foreground" :disabled="busy" @click="backToResults">
           <ArrowLeft class="rtl:rotate-180" aria-hidden="true" />
@@ -321,6 +328,7 @@ async function backToResults() {
             {{ t('bookRequests.series.requestSelected') }}
           </Button>
           <Button
+            v-if="showRequestAll"
             type="button"
             variant="outline"
             class="h-auto min-h-9 whitespace-normal"
@@ -334,7 +342,7 @@ async function backToResults() {
             {{ t('bookRequests.series.stop') }}
           </Button>
         </div>
-        <p v-if="selectionSummary.mode !== 'all'" id="series-request-all-hint" class="text-xs text-muted-foreground">
+        <p v-if="showRequestAll && selectionSummary.mode !== 'all'" id="series-request-all-hint" class="text-xs text-muted-foreground">
           {{ t('bookRequests.series.requestAllHint') }}
         </p>
       </div>

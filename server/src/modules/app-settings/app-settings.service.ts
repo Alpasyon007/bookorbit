@@ -22,6 +22,7 @@ import { StatsCache } from '../../common/cache/stats-cache';
 import { storageConfig } from '../../config/config';
 import {
   API_KEY_MANAGED_SETTING_KEYS,
+  CUSTOM_PATCH_POLICY_KEY,
   APP_SETTING_KEYS,
   BOOK_DOCK_MANAGED_SETTING_KEYS,
   DEFAULT_LIBRARY_ACCESS_CONFIG,
@@ -91,6 +92,7 @@ export class AppSettingsService {
   }
 
   async update(key: string, value: string) {
+    if (key === CUSTOM_PATCH_POLICY_KEY) throw new BadRequestException('Setting is managed by the custom patch policy endpoint');
     if (BOOK_DOCK_MANAGED_SETTING_KEYS.includes(key)) {
       throw new BadRequestException(`Setting '${key}' is managed by the Book Dock endpoints and cannot be written here`);
     }

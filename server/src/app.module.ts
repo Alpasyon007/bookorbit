@@ -111,6 +111,7 @@ import { PageLocatorModule } from './modules/page-locator/page-locator.module';
 import { YearReviewModule } from './modules/year-review/year-review.module';
 import { VisualMatchModule } from './modules/visual-match/visual-match.module';
 import { StoryEditsModule } from './modules/story-edits/story-edits.module';
+import { CustomPatchSettingsModule } from './modules/custom-patches/custom-patch-settings.module';
 
 @Module({
   imports: [
@@ -148,6 +149,7 @@ import { StoryEditsModule } from './modules/story-edits/story-edits.module';
     }),
     DbModule,
     SeriesIdentityModule,
+    CustomPatchSettingsModule,
     CommonModule,
     LibraryScopeModule,
     SeedModule,

@@ -93,3 +93,5 @@ export const DEFAULT_AUTHOR_ENRICHMENT_CONFIG: AuthorAutoEnrichmentConfig = {
     missingPhoto: false,
   },
 };
+
+export const CUSTOM_PATCH_POLICY_KEY = 'fork.custom-patches.policy.v1';

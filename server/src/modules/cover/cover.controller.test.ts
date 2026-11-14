@@ -31,21 +31,28 @@ describe('CoverController', () => {
           provider: 'all',
         },
         response as never,
+        { id: 7 } as never,
       ),
     ).resolves.toEqual([]);
 
-    expect(coverService.searchCovers).toHaveBeenCalledWith({
-      title: 'Dune',
-      author: 'Frank Herbert',
-      isAudiobook: true,
-      provider: 'all',
-    });
+    expect(coverService.searchCovers).toHaveBeenCalledWith(
+      {
+        title: 'Dune',
+        author: 'Frank Herbert',
+        isAudiobook: true,
+        provider: 'all',
+      },
+      7,
+    );
     expect(response.header).toHaveBeenCalledWith(COVER_SEARCH_FAILED_SOURCES_HEADER, 'hachette-uk');
   });
 
   it('lists available cover sources', async () => {
     coverService.listCoverSources.mockResolvedValue([{ key: 'metadata:hardcover', label: 'Hardcover', media: ['ebook', 'audio'] }]);
-    await expect(controller.listCoverSources()).resolves.toEqual([{ key: 'metadata:hardcover', label: 'Hardcover', media: ['ebook', 'audio'] }]);
+    await expect(controller.listCoverSources({ id: 12 } as never)).resolves.toEqual([
+      { key: 'metadata:hardcover', label: 'Hardcover', media: ['ebook', 'audio'] },
+    ]);
+    expect(coverService.listCoverSources).toHaveBeenCalledWith(12);
   });
 
   it('writes proxied image content to the response object', async () => {

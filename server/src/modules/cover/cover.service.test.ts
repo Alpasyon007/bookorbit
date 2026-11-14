@@ -151,9 +151,9 @@ describe('CoverService', () => {
       } as unknown as CoverProviderRegistry;
       const service = createService(providerRegistry);
 
-      const { results } = await service.searchCovers({ title: 'Dune', author: 'Frank Herbert', provider: 'all' });
+      const { results } = await service.searchCovers({ title: 'Dune', author: 'Frank Herbert', provider: 'all' }, 7);
 
-      expect((providerRegistry.select as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]).toBe('all');
+      expect(providerRegistry.select).toHaveBeenCalledWith(7, 'all', undefined);
       expect(providerA.search).toHaveBeenCalledWith({ title: 'Dune', author: 'Frank Herbert', signal: expect.any(AbortSignal) });
       expect(providerB.search).toHaveBeenCalledWith({ title: 'Dune', author: 'Frank Herbert', signal: expect.any(AbortSignal) });
       expect(results).toHaveLength(3);
@@ -195,7 +195,7 @@ describe('CoverService', () => {
       } as unknown as CoverProviderRegistry;
       const service = createService(providerRegistry);
 
-      const { results } = await service.searchCovers({ title: 'Dune', provider: 'all' });
+      const { results } = await service.searchCovers({ title: 'Dune', provider: 'all' }, 7);
 
       expect(results.map((result) => result.sourceUrl)).toEqual([
         'https://img.example/ddg-1.jpg',
@@ -221,7 +221,7 @@ describe('CoverService', () => {
       } as unknown as CoverProviderRegistry;
       const service = createService(providerRegistry);
 
-      const { results } = await service.searchCovers({ title: 'The Martian', author: 'Andy Weir', isAudiobook: true, provider: 'itunes' });
+      const { results } = await service.searchCovers({ title: 'The Martian', author: 'Andy Weir', isAudiobook: true, provider: 'itunes' }, 7);
 
       expect(provider.search).toHaveBeenCalledWith({
         title: 'The Martian',
@@ -241,7 +241,7 @@ describe('CoverService', () => {
       ];
       const service = createService({ select: vi.fn().mockResolvedValue(providers) } as unknown as CoverProviderRegistry);
 
-      const response = await service.searchCovers({ title: 'Dune', provider: 'all' });
+      const response = await service.searchCovers({ title: 'Dune', provider: 'all' }, 7);
 
       expect(response.failedSources).toEqual(['hachette-uk', 'waterstones']);
       expect(response.results).toHaveLength(1);
@@ -259,7 +259,7 @@ describe('CoverService', () => {
       const providers = Array.from({ length: 6 }, (_, index) => ({ key: `source-${index}`, search }));
       const service = createService({ select: vi.fn().mockResolvedValue(providers) } as unknown as CoverProviderRegistry);
 
-      const result = service.searchCovers({ title: 'Dune', provider: 'all' });
+      const result = service.searchCovers({ title: 'Dune', provider: 'all' }, 7);
       await Promise.resolve();
       expect(search).toHaveBeenCalledTimes(4);
       deadline.abort();

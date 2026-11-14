@@ -81,6 +81,11 @@ describe('AppSettingsService', () => {
   });
 
   describe('update', () => {
+    it('rejects generic writes to the managed custom patch policy', async () => {
+      await expect(service.update('fork.custom-patches.policy.v1', '{}')).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.updateByKey).not.toHaveBeenCalled();
+    });
+
     it('returns updated setting', async () => {
       const setting = { key: 'allow_registration', value: 'true' };
       repo.updateByKey.mockResolvedValue(setting as never);

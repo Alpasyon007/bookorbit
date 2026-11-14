@@ -6,6 +6,20 @@ const state = vi.hoisted(() => ({
   fetchLibraries: vi.fn<() => Promise<void>>(),
   autoApprove: false,
 }))
+const patch = await vi.hoisted(async () => {
+  const { ref, shallowRef } = await import('vue')
+  const { DEFAULT_CUSTOM_PATCH_POLICY, DEFAULT_CUSTOM_PATCH_PREFERENCES } = await import('@bookorbit/types')
+  return {
+    preferences: shallowRef(DEFAULT_CUSTOM_PATCH_PREFERENCES),
+    policy: shallowRef(DEFAULT_CUSTOM_PATCH_POLICY),
+    defaults: DEFAULT_CUSTOM_PATCH_PREFERENCES,
+    defaultPolicy: DEFAULT_CUSTOM_PATCH_POLICY,
+    loaded: ref(true),
+    loadFailed: ref(false),
+    load: vi.fn<() => Promise<boolean>>(),
+  }
+})
+vi.mock('@/features/custom-patches/composables/useCustomPatchSettings', () => ({ useCustomPatchSettings: () => patch }))
 vi.mock('@/lib/api', () => ({ api: state.api }))
 vi.mock('@/features/auth/composables/usePermissions', () => ({ usePermissions: () => ({ hasPermission: () => state.autoApprove }) }))
 vi.mock('@/features/library/composables/useLibraries', async () => {
@@ -54,6 +68,9 @@ async function setup(onAcknowledged = vi.fn<() => void>()) {
 }
 beforeEach(() => {
   state.api.mockReset()
+  patch.preferences.value = patch.defaults
+  patch.policy.value = patch.defaultPolicy
+  patch.load.mockReset().mockResolvedValue(true)
   state.autoApprove = false
   state.fetchLibraries.mockReset().mockResolvedValue()
   state.api.mockImplementation(async (path, init) => {
@@ -67,6 +84,20 @@ beforeEach(() => {
   })
 })
 describe('series requests', () => {
+  it('hides the feature panel under disabled instance policy', () => {
+    patch.policy.value = { ...patch.defaultPolicy, seriesRequestsEnabled: false }
+    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn() } })
+    expect(wrapper.find('#series-search-title').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('hides only Request all when that action is disabled', async () => {
+    patch.preferences.value = { ...patch.defaults, seriesRequests: { ...patch.defaults.seriesRequests, showRequestAll: false } }
+    const wrapper = await setup()
+    expect(wrapper.findAll('button').some((button) => button.text().startsWith('Request all'))).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Request selected books')).toBe(true)
+    wrapper.unmount()
+  })
   it('selects requestable books by default and explains why other books cannot be selected', async () => {
     const previous = state.api.getMockImplementation()!
     state.api.mockImplementation(async (path, init) => {

@@ -1,12 +1,12 @@
-import { computed } from 'vue'
+import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { breakpointsTailwind, useBreakpoints } from '@vueuse/core'
 import { useDisplaySettings, type BookViewMode } from '@/composables/useDisplaySettings'
 
-export function useEffectiveViewMode(options: { allowSeriesGrid?: boolean } = {}) {
+export function useEffectiveViewMode(options: { allowSeriesGrid?: MaybeRefOrGetter<boolean> } = {}) {
   const { viewMode: preference } = useDisplaySettings()
   const { md } = useBreakpoints(breakpointsTailwind)
   const viewMode = computed<BookViewMode>({
-    get: () => (!options.allowSeriesGrid && preference.value === 'series-grid' ? 'grid' : preference.value),
+    get: () => (!toValue(options.allowSeriesGrid) && preference.value === 'series-grid' ? 'grid' : preference.value),
     set: (mode) => {
       preference.value = mode
     },

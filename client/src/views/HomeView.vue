@@ -38,8 +38,9 @@ import SendBookDialog from '@/features/email/components/SendBookDialog.vue'
 import SaveAsSmartScopeDialog from '@/features/smart-scope/components/SaveAsSmartScopeDialog.vue'
 import DeleteBookDialog from '@/features/book/components/DeleteBookDialog.vue'
 import JumpRail from '@/features/book/components/JumpRail.vue'
-import { BOOK_VIEW_MODES, type BookCard } from '@bookorbit/types'
+import type { BookCard } from '@bookorbit/types'
 import { useBookViewWindow } from '@/features/book/composables/useBookViewWindow'
+import { useLibrarySeriesGrid } from '@/features/custom-patches/composables/useLibrarySeriesGrid'
 import { useViewSearch } from '@/features/book/composables/useViewSearch'
 import { useSeriesCollapsePreference } from '@/features/book/composables/useSeriesCollapsePreference'
 import { useEffectiveSeriesCollapse } from '@/features/book/composables/useEffectiveSeriesCollapse'
@@ -56,7 +57,6 @@ import { useLibraryHeaderFacts } from '@/features/library/composables/useLibrary
 import { formatFilterValueLabel, sortFieldLabel } from '@/features/book/lib/filter-labels'
 import { formatBytes } from '@/lib/formatting'
 import { formatRelativeTimeFromNow } from '@/i18n/formatters'
-import { useEffectiveViewMode } from '@/composables/useEffectiveViewMode'
 import { useViewDisplaySettings } from '@/composables/useViewDisplaySettings'
 import { useLibraries } from '@/features/library/composables/useLibraries'
 import { useLibraryUploadEvents } from '@/features/library/composables/useLibraryUploadEvents'
@@ -81,9 +81,23 @@ const LinkBooksSheet = defineAsyncComponent(() => import('@/features/book/compon
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { viewMode, effectiveViewMode } = useEffectiveViewMode({ allowSeriesGrid: true })
-const seriesGrid = computed(() => effectiveViewMode.value === 'series-grid')
-const libraryViewModes = [...BOOK_VIEW_MODES]
+const {
+  viewMode,
+  effectiveViewMode,
+  seriesGrid,
+  libraryViewModes,
+  seriesGridOptions,
+  gridPreferences,
+  listingEnabled,
+  loaded: patchSettingsLoaded,
+  loading: patchSettingsLoading,
+  loadFailed: patchSettingsLoadFailed,
+  load: loadPatchSettings,
+} = useLibrarySeriesGrid()
+
+function handleRetryPatchSettings() {
+  return loadPatchSettings()
+}
 const { libraries, loaded: librariesLoaded } = useLibraries()
 const { hasPermission, isDemoRestrictedAccount } = usePermissions()
 
@@ -161,6 +175,8 @@ const {
   listEndpoint: (id) => `/api/v1/libraries/${id}/books`,
   bucketsEndpoint: (id) => `/api/v1/libraries/${id}/books/jump-buckets`,
   viewMode: effectiveViewMode,
+  seriesGridOptions,
+  enabled: listingEnabled,
   railEnabled: showJumpRails,
   railViewport: mainRef,
   collapseEnabled: effectiveCollapseEnabled,
@@ -958,6 +974,22 @@ defineOptions({ name: 'HomeView' })
         <EntityNotFound v-if="libraryNotFound" :entity="t('views.entity.library')" />
 
         <template v-else>
+          <div
+            v-if="patchSettingsLoadFailed && !patchSettingsLoaded"
+            class="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+            role="status"
+          >
+            {{ t('settings.customPatches.loadFailed') }}
+            <button
+              type="button"
+              class="font-medium text-primary underline disabled:opacity-50"
+              :disabled="patchSettingsLoading"
+              @click="handleRetryPatchSettings"
+            >
+              {{ t(patchSettingsLoading ? 'common.loading' : 'common.retry') }}
+            </button>
+          </div>
+          <p v-else-if="!listingEnabled" class="mb-4 text-sm text-muted-foreground" role="status">{{ t('common.loading') }}</p>
           <div v-if="error" class="text-sm text-destructive mb-4">{{ error }}</div>
 
           <!-- Empty state: no matches with filters -->
@@ -999,6 +1031,9 @@ defineOptions({ name: 'HomeView' })
             :is-selected="isSelected"
             :new-book-ids="newBookIds"
             :series-grid-blocks="seriesGrid ? seriesGridBlocks : undefined"
+            :series-grid-heading-indent="gridPreferences.headingIndent"
+            :series-grid-show-dividers="gridPreferences.showDividers"
+            :series-grid-standalone-label="gridPreferences.standaloneLabel"
             :rail-gutter="!seriesGrid && railGutterReserved"
             :rail-gutter-kind="bucketKind"
             @range="handleRange"

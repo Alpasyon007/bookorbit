@@ -3,6 +3,7 @@ import { SelfWriteRegistryModule } from '../../common/self-write-registry.module
 
 import { AchievementModule } from '../achievement/achievement.module';
 import { AppSettingsModule } from '../app-settings/app-settings.module';
+import { CustomPatchSettingsModule } from '../custom-patches/custom-patch-settings.module';
 import { AudiobookChaptersModule } from '../audiobook-chapters/audiobook-chapters.module';
 import { BookAliasModule } from '../book-alias/book-alias.module';
 import { EmbeddingModule } from '../embedding/embedding.module';
@@ -50,6 +51,7 @@ import { ReadingProgressService } from './reading-progress.service';
     FileWriteModule,
     SelfWriteRegistryModule,
     AppSettingsModule,
+    CustomPatchSettingsModule,
     MetadataScoreModule,
     NarratorModule,
     UserBookNoteModule,

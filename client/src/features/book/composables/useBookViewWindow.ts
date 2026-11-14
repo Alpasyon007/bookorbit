@@ -7,6 +7,7 @@ import {
   jumpBucketKindForSort,
   type GroupRule,
   type JumpBucket,
+  type SeriesGridOptions,
   type SortSpec,
 } from '@bookorbit/types'
 import { useBookProgressRefresh } from './useBookProgressRefresh'
@@ -37,6 +38,7 @@ export function useBookViewWindow(options: {
   listEndpoint: (id: number) => string
   bucketsEndpoint: (id: number) => string
   viewMode: Ref<string>
+  seriesGridOptions?: Ref<SeriesGridOptions>
   railEnabled?: Ref<boolean>
   railViewport?: Ref<HTMLElement | null>
   collapseEnabled?: Ref<boolean>
@@ -80,7 +82,11 @@ export function useBookViewWindow(options: {
     sort: sort.value,
     ...(randomSortActive.value ? { randomSeed: randomSeed.value } : {}),
     ...(filter.value ? { filter: filter.value } : {}),
-    ...(options.viewMode.value === 'series-grid' ? { groupBySeries: true } : options.collapseEnabled?.value ? { collapseSeries: true } : {}),
+    ...(options.viewMode.value === 'series-grid'
+      ? { groupBySeries: true, ...(options.seriesGridOptions ? { seriesGridOptions: options.seriesGridOptions.value } : {}) }
+      : options.collapseEnabled?.value
+        ? { collapseSeries: true }
+        : {}),
     ...(options.collapseLinked ? { collapseLinked: true } : {}),
     ...(options.q?.value.trim() ? { q: options.q.value.trim() } : {}),
   }))

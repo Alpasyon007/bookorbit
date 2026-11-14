@@ -29,6 +29,9 @@ const props = withDefaults(
     railGutterKind?: JumpBucketKind | null
     allowMoveToLibrary?: boolean
     seriesGridBlocks?: readonly (SeriesGridBlock | undefined)[]
+    seriesGridHeadingIndent?: number
+    seriesGridShowDividers?: boolean
+    seriesGridStandaloneLabel?: string
     /** Draws every card as this medium when the book has it, such as in a series' Audiobooks group. */
     mediaKind?: ConcreteBookMediaKind | null
   }>(),
@@ -40,6 +43,9 @@ const props = withDefaults(
     squareCoverScale: 1,
     railGutter: false,
     railGutterKind: null,
+    seriesGridHeadingIndent: 0,
+    seriesGridShowDividers: true,
+    seriesGridStandaloneLabel: '',
     mediaKind: null,
   },
 )
@@ -153,8 +159,12 @@ function seriesHeadingTag(depth: number) {
 }
 
 function seriesHeadingLabel(heading: NonNullable<SeriesGridRow['heading']>) {
-  const label = heading.label ?? t('views.bookView.seriesGrid.standalone')
+  const label = heading.label ?? (props.seriesGridStandaloneLabel || t('views.bookView.seriesGrid.standalone'))
   return heading.continued ? t('views.bookView.seriesGrid.continued', { series: label }) : label
+}
+
+function seriesHeadingStyle(row: SeriesGridRow, depth: number) {
+  return { height: `${row.size}px`, paddingInlineStart: `${Math.min(depth, 4) * props.seriesGridHeadingIndent}px` }
 }
 
 const scrollerStyle = computed(() => ({
@@ -401,11 +411,11 @@ defineExpose({ scrollToIndex })
       @update="handleSeriesGridUpdate"
     >
       <template #default="{ item }">
-        <div v-if="item.heading" class="flex items-center pb-2" :style="{ height: `${item.size}px` }">
+        <div v-if="item.heading" class="flex items-center pb-2" :style="seriesHeadingStyle(item, item.heading.depth)">
           <component
             :is="seriesHeadingTag(item.heading.depth)"
-            class="w-full truncate border-b border-border pb-2 text-sm text-foreground"
-            :class="item.heading.depth === 0 ? 'font-semibold' : 'font-medium'"
+            class="w-full truncate border-b pb-2 text-sm text-foreground"
+            :class="[item.heading.depth === 0 ? 'font-semibold' : 'font-medium', seriesGridShowDividers ? 'border-border' : 'border-transparent']"
             :role="item.heading.depth >= 5 ? 'heading' : undefined"
             :aria-level="item.heading.depth >= 5 ? item.heading.depth + 2 : undefined"
             :title="seriesHeadingLabel(item.heading)"

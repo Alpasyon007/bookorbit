@@ -2,6 +2,20 @@ import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({ api: vi.fn<(path: string, init?: RequestInit) => Promise<Response>>() }))
+const patch = await vi.hoisted(async () => {
+  const { shallowRef, ref } = await import('vue')
+  const { DEFAULT_CUSTOM_PATCH_POLICY, DEFAULT_CUSTOM_PATCH_PREFERENCES } = await import('@bookorbit/types')
+  return {
+    preferences: shallowRef(DEFAULT_CUSTOM_PATCH_PREFERENCES),
+    policy: shallowRef(DEFAULT_CUSTOM_PATCH_POLICY),
+    defaults: DEFAULT_CUSTOM_PATCH_PREFERENCES,
+    defaultPolicy: DEFAULT_CUSTOM_PATCH_POLICY,
+    loaded: ref(true),
+    loadFailed: ref(false),
+    load: vi.fn<() => Promise<boolean>>(),
+  }
+})
+vi.mock('@/features/custom-patches/composables/useCustomPatchSettings', () => ({ useCustomPatchSettings: () => patch }))
 vi.mock('@/lib/api', () => ({ api: state.api }))
 vi.mock('@/features/auth/composables/usePermissions', () => ({ usePermissions: () => ({ hasPermission: () => false }) }))
 import { useSeriesRequests } from '../composables/useSeriesRequests'
@@ -13,6 +27,68 @@ const json = (body: unknown) => ({ ok: true, json: async () => body }) as Respon
 describe('useSeriesRequests', () => {
   beforeEach(() => {
     state.api.mockReset()
+    patch.preferences.value = patch.defaults
+    patch.policy.value = patch.defaultPolicy
+    patch.loaded.value = true
+    patch.loadFailed.value = false
+    patch.load.mockReset().mockResolvedValue(true)
+  })
+
+  it('starts from the saved format and empty selection while preserving explicit Select all', async () => {
+    patch.preferences.value = {
+      ...patch.defaults,
+      seriesRequests: { enabled: true, defaultFormat: 'audiobook', initialSelection: 'none', showRequestAll: false },
+    }
+    const { model, wrapper, posts } = await setupSeries(2)
+    expect(model.mediaKind.value).toBe('audiobook')
+    expect(model.selectionSummary.value).toEqual({ mode: 'explicit', count: 0 })
+    expect(model.isBookSelected(model.books.value[0]!, 0)).toBe(false)
+    await model.requestAll()
+    expect(posts()).toHaveLength(0)
+    model.selectAllBooks()
+    expect(model.selectionSummary.value).toEqual({ mode: 'all', count: 0 })
+    await model.requestSelected()
+    expect(posts().map((item) => item.mediaKind)).toEqual(['audiobook', 'audiobook'])
+    wrapper.unmount()
+  })
+
+  it('preserves manually selected format when settings arrive after the editor mounts', async () => {
+    const { model, wrapper } = await setupSeries(2)
+    model.mediaKind.value = 'audiobook'
+    await flushPromises()
+    model.mediaKind.value = 'ebook'
+    await flushPromises()
+    patch.preferences.value = { ...patch.defaults, seriesRequests: { ...patch.defaults.seriesRequests, defaultFormat: 'audiobook' } }
+    await flushPromises()
+    expect(model.mediaKind.value).toBe('ebook')
+    wrapper.unmount()
+  })
+
+  it('rechecks active settings between batches and stops with truthful partial progress', async () => {
+    const { model, wrapper, posts } = await setupSeries(30)
+    patch.load.mockResolvedValueOnce(true).mockImplementationOnce(async () => {
+      patch.policy.value = { ...patch.defaultPolicy, seriesRequestsEnabled: false }
+      return true
+    })
+    await model.requestAll()
+    expect(posts()).toHaveLength(25)
+    expect(patch.load).toHaveBeenCalledTimes(2)
+    expect(model.progress.value).toContain('25')
+    expect(model.progress.value).not.toContain('All catalog pages processed')
+    expect(model.error.value).toContain('Series requests are disabled')
+    wrapper.unmount()
+  })
+
+  it('retains an explicit selection if settings cannot be checked before submitting', async () => {
+    const { model, wrapper, posts } = await setupSeries(2)
+    model.clearSelectedBooks()
+    model.toggleBook(model.books.value[0]!, 0)
+    patch.load.mockResolvedValueOnce(false)
+    await model.requestSelected()
+    expect(posts()).toHaveLength(0)
+    expect(model.selectionSummary.value).toEqual({ mode: 'explicit', count: 1 })
+    expect(model.error.value).toContain('Could not check the series request settings')
+    wrapper.unmount()
   })
   it('walks every page in bounded batches using a captured medium', async () => {
     const rows = Array.from({ length: 60 }, (_, i) => ({

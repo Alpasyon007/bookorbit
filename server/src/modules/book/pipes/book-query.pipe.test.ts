@@ -45,6 +45,14 @@ describe('BookQueryPipe', () => {
     expect(() => pipe.transform({ groupBySeries: 'true' })).toThrow(BadRequestException);
   });
 
+  it('validates the complete grouped layout options', () => {
+    const options = { hierarchyOrder: 'reverse', groupOrder: 'name-desc', maxDepth: 2, directBooksPosition: 'first', standalonePosition: 'last' };
+    expect(pipe.transform({ groupBySeries: true, seriesGridOptions: options }).seriesGridOptions).toEqual(options);
+    expect(() => pipe.transform({ seriesGridOptions: { ...options, maxDepth: 9 } })).toThrow(BadRequestException);
+    expect(() => pipe.transform({ seriesGridOptions: { ...options, groupOrder: 'random' } })).toThrow(BadRequestException);
+    expect(() => pipe.transform({ seriesGridOptions: { ...options, unknown: true } })).toThrow(BadRequestException);
+  });
+
   it('accepts a valid filter group rule', () => {
     const result = pipe.transform({
       filter: {

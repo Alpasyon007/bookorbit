@@ -90,6 +90,7 @@ import { assembleBookCards, assembleCollapsedBookCards } from './utils/assemble-
 import type { RequestUser } from '../../common/types/request-user';
 import { UpdateBookFileDto } from './dto/update-book-file.dto';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import { CustomPatchSettingsService } from '../custom-patches/custom-patch-settings.service';
 import { BookEmbedderService } from '../embedding/book-embedder.service';
 import { MetadataService } from '../metadata/metadata.service';
 import { MetadataExtractionService } from '../metadata/metadata-extraction.service';
@@ -336,6 +337,7 @@ export class BookService {
     private readonly bookMetadataLockService: BookMetadataLockService,
     private readonly coverStore: BookCoverStore,
     private readonly selfWriteRegistry: SelfWriteRegistry,
+    private readonly customPatches: CustomPatchSettingsService,
     @Optional() private readonly embedder: BookEmbedderService,
     @Optional() private readonly fileWriteService: FileWriteService,
     @Optional() private readonly fileRenameService: FileRenameService,
@@ -1295,6 +1297,9 @@ export class BookService {
   async executeBooksQuery(userId: number, where: SQL | undefined, query: BookQuery, options?: BookQueryExecutionOptions): Promise<BooksPage> {
     const start = Date.now();
     const { page, size } = query.pagination;
+    if (query.groupBySeries && !(await this.customPatches.getPolicy()).seriesGridEnabled) {
+      throw new ForbiddenException('Series Grid is disabled by the server administrator');
+    }
     if (hasCollectionScopedSort(query.sort) && options?.defaultCollectionId === undefined) {
       throw new BadRequestException('This sort is only available inside a collection');
     }
@@ -1364,6 +1369,7 @@ export class BookService {
         ...cardQuery,
         collapseLinked,
         sortByAuthor: query.sort.some((tier) => tier.field === 'author'),
+        seriesGridOptions: query.seriesGridOptions,
       });
       cardPage = grouped;
       bookTotal = grouped.bookTotal;
