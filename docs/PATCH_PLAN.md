@@ -1,6 +1,6 @@
 # Personal fork patch plan
 
-The fork is based on upstream `v3.8.0` (`450c18e2`). The working patch queue `codex/custom-3.8` targets `v3.8.0-custom.7` and adds no database migration or new dependency. Publication follows the release and upgrade gates in [FORK_WORKFLOW.md](FORK_WORKFLOW.md).
+The fork is based on upstream `v3.8.0` (`450c18e2`). The working patch queue `codex/custom-3.8` targets `v3.8.0-custom.8` and adds no database migration or new dependency. Publication follows the release and upgrade gates in [FORK_WORKFLOW.md](FORK_WORKFLOW.md).
 
 ## Patch boundaries
 
@@ -44,7 +44,7 @@ Hardcover explicitly bans `_ilike` and related filters even though they appear i
 
 | Patch                                         | Status                             | Schema | Upstream status                                  |
 | --------------------------------------------- | ---------------------------------- | ------ | ------------------------------------------------ |
-| Fork checks, custom version and bundled notes | Released through `v3.8.0-custom.6` | None   | Fork-specific adapters                           |
+| Fork checks, custom version and bundled notes | Released through `v3.8.0-custom.7` | None   | Fork-specific adapters                           |
 | Sidebar footer                                | Implemented `cb47d785`             | None   | Reassess on next upstream release                |
 | Library Series Grid                           | Implemented `8e416fcb`             | None   | Reassess on next upstream release                |
 | Cover sources                                 | Implemented `686a5c85`             | None   | Reassess supported sources and provider contract |
@@ -56,5 +56,6 @@ Hardcover explicitly bans `_ilike` and related filters even though they appear i
 | Nested Series Grid                            | Implemented `b3be9196`             | None   | Reassess membership order and paginated layout   |
 | Standalone books within a series              | Implemented `cf487c5f`             | None   | Reassess direct-book grouping and paging         |
 | Series Grid page boundaries                   | Implemented `7444595a`             | None   | Recheck virtual row continuity across pages      |
+| Series Grid heading alignment                 | Implemented `4463fff6`             | None   | Recheck nested heading levels and alignment      |
 
 Record any upstream replacement here at the next upgrade.

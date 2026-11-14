@@ -2,6 +2,22 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.8',
+    name: 'Custom revision 8: aligned Series Grid headings',
+    date: '2026-11-14',
+    highlights: [
+      {
+        icon: 'LayoutGrid',
+        title: 'Aligned series headings',
+        body: 'Subseries titles and dividers now align with their parent series in Series Grid. Subseries are still grouped under their parents.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.8',
+    changelogBody:
+      '### Custom changes\n\n- Align nested Series Grid titles and dividers with the parent series. Heading levels and book grouping are preserved.\n\nBased on upstream v3.8.0. This change adds no database migration.',
+  },
+  {
     version: 'v3.8.0-custom.7',
     name: 'Custom revision 7: continuous Series Grid rows',
     date: '2026-11-13',
