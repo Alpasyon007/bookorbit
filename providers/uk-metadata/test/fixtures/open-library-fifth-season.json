@@ -1,0 +1,24 @@
+{
+  "docs": [
+    {
+      "author_name": ["N. K. Jemisin"],
+      "key": "/works/OL17363125W",
+      "title": "The Fifth Season",
+      "editions": {
+        "numFound": 1,
+        "start": 0,
+        "numFoundExact": true,
+        "docs": [
+          {
+            "key": "/books/OL27305835M",
+            "title": "The fifth season",
+            "language": ["eng"],
+            "publisher": ["Orbit"],
+            "publish_date": ["2016"],
+            "isbn": ["9780356508191", "0356508196"]
+          }
+        ]
+      }
+    }
+  ]
+}

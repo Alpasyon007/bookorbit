@@ -19,6 +19,7 @@ pnpm-debug.log*
 
 # Package managers
 package-lock.json
+!/providers/uk-metadata/package-lock.json
 
 # Docker
 docker/postgres/data/

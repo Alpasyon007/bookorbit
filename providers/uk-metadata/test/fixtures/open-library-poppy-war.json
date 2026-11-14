@@ -1,0 +1,47 @@
+{
+  "docs": [
+    {
+      "author_name": ["R. F. Kuang"],
+      "key": "/works/OL19351054W",
+      "title": "The Poppy War"
+    }
+  ],
+  "entries": [
+    {
+      "isbn_13": ["9780008239800"],
+      "languages": [
+        {
+          "key": "/languages/eng"
+        }
+      ],
+      "publish_date": "2018",
+      "publishers": ["HarperCollins Publishers"],
+      "title": "Poppy War",
+      "key": "/books/OL37277806M"
+    },
+    {
+      "title": "The Poppy War",
+      "publish_date": "2018",
+      "publishers": ["Harper Voyager"],
+      "languages": [
+        {
+          "key": "/languages/eng"
+        }
+      ],
+      "isbn_13": ["9780008239848"],
+      "physical_format": "Paperback",
+      "key": "/books/OL28688483M",
+      "number_of_pages": 527
+    },
+    {
+      "publishers": ["Harper Voyager"],
+      "number_of_pages": 544,
+      "physical_format": "paperback",
+      "key": "/books/OL27333158M",
+      "title": "The Poppy War",
+      "isbn_13": ["9780062662583"],
+      "isbn_10": ["0062662589"],
+      "publish_date": "Apr 23, 2019"
+    }
+  ]
+}
