@@ -93,7 +93,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [book-api-contract, authorization-matrix, book-requests]
+        suite:
+          [
+            book-api-contract,
+            authorization-matrix,
+            book-requests,
+            metadata-http-providers,
+          ]
     env:
       E2E_DATABASE_URL: postgres://bookorbit:bookorbit@localhost:5432/bookorbit_e2e
       NODE_ENV: test

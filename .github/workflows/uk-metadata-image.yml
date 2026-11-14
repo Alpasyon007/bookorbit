@@ -1,0 +1,191 @@
+name: UK Metadata Provider
+run-name: UK metadata provider - ${{ github.ref_name }}
+
+on:
+  push:
+    branches: ["codex/**", "custom/**", "BO-*-*"]
+    tags: ["uk-metadata-v*"]
+    paths:
+      - "providers/uk-metadata/**"
+      - ".github/workflows/uk-metadata-image.yml"
+      - "scripts/fork/*uk-metadata*.mjs"
+      - "scripts/fork/publish-image*.mjs"
+      - "scripts/fork/release-version*.mjs"
+  pull_request:
+    branches: ["codex/custom-*", "custom/**", "main"]
+    paths:
+      - "providers/uk-metadata/**"
+      - ".github/workflows/uk-metadata-image.yml"
+      - "scripts/fork/*uk-metadata*.mjs"
+      - "scripts/fork/publish-image*.mjs"
+      - "scripts/fork/release-version*.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    if: github.repository != 'bookorbit/bookorbit'
+    name: Test and smoke UK metadata provider
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      image-artifact: ${{ steps.archive.outputs.artifact }}
+      image-id: ${{ steps.archive.outputs.image-id }}
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Validate version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" == tag ]]; then
+            version=$(node scripts/fork/uk-metadata-version.mjs "$TAG")
+          else
+            version=$(node scripts/fork/uk-metadata-version.mjs)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install provider dependencies
+        working-directory: providers/uk-metadata
+        run: npm ci
+      - name: Check formatting and run provider tests
+        working-directory: providers/uk-metadata
+        run: |
+          set -euo pipefail
+          npm run format:check
+          npm test
+      - name: Test release safeguards
+        run: |
+          set -euo pipefail
+          providers/uk-metadata/node_modules/.bin/prettier --check .github/workflows/uk-metadata-image.yml scripts/fork/*uk-metadata*.mjs scripts/fork/publish-image*.mjs
+          node --test scripts/fork/uk-metadata-version.test.mjs scripts/fork/release-version.test.mjs scripts/fork/publish-image.test.mjs
+      - name: Validate workflow syntax
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= .github/workflows/uk-metadata-image.yml
+      - name: Build provider image
+        env:
+          COMMIT: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker build --platform linux/amd64 --provenance=false \
+            --label "org.opencontainers.image.revision=$COMMIT" \
+            --label "org.opencontainers.image.source=$SERVER_URL/$REPOSITORY" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --tag "uk-metadata-tested:$COMMIT" providers/uk-metadata
+      - name: Smoke-test production provider entrypoint
+        env:
+          COMMIT: ${{ github.sha }}
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          AUTH_TOKEN=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(24).toString("hex"))')
+          export AUTH_TOKEN
+          echo "::add-mask::$AUTH_TOKEN"
+          container=$(docker run --detach --publish 127.0.0.1::8080 --env AUTH_TOKEN "uk-metadata-tested:$COMMIT")
+          trap 'docker rm --force "$container" >/dev/null' EXIT
+          address=$(docker port "$container" 8080/tcp)
+          PROVIDER_URL="http://$address" node scripts/fork/smoke-uk-metadata.mjs
+      - name: Archive the exact tested image
+        if: github.ref_type == 'tag'
+        id: archive
+        env:
+          COMMIT: ${{ github.sha }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          image="uk-metadata-tested:$COMMIT"
+          echo "image-id=$(docker image inspect --format '{{.Id}}' "$image")" >> "$GITHUB_OUTPUT"
+          echo "artifact=uk-metadata-image-$ATTEMPT" >> "$GITHUB_OUTPUT"
+          docker save "$image" | gzip -1 > "$RUNNER_TEMP/uk-metadata-image.tar.gz"
+      - name: Upload tested image
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.1
+        with:
+          name: ${{ steps.archive.outputs.artifact }}
+          path: ${{ runner.temp }}/uk-metadata-image.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  publish:
+    name: Publish verified UK metadata provider image
+    needs: verify
+    if: github.repository != 'bookorbit/bookorbit' && github.event_name == 'push' && github.ref_type == 'tag' && needs.verify.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: uk-metadata-image-publish-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out release validation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Download this run's tested image
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.verify.outputs.image-artifact }}
+          path: ${{ runner.temp }}/verified-uk-metadata
+      - name: Verify image identity and release tag
+        id: meta
+        env:
+          OWNER: ${{ github.repository_owner }}
+          COMMIT: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+          EXPECTED_ID: ${{ needs.verify.outputs.image-id }}
+        run: |
+          set -euo pipefail
+          version=$(node scripts/fork/uk-metadata-version.mjs "$TAG")
+          test -n "$EXPECTED_ID"
+          docker load --input "$RUNNER_TEMP/verified-uk-metadata/uk-metadata-image.tar.gz"
+          image="uk-metadata-tested:$COMMIT"
+          test "$(docker image inspect --format '{{.Id}}' "$image")" = "$EXPECTED_ID"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = "$COMMIT"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image")" = "$version"
+          target="ghcr.io/${OWNER,,}/bookorbit-uk-metadata:$version"
+          docker tag "$image" "$target"
+          echo "image=$target" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR after verification
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Publish the tested provider image
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          EXPECTED_ID: ${{ needs.verify.outputs.image-id }}
+          TAG: ${{ github.ref_name }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: node scripts/fork/publish-uk-metadata.mjs

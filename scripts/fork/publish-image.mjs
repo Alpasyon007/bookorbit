@@ -69,10 +69,17 @@ function runDocker(args) {
   return execFileSync("docker", args, { encoding: "utf8", timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }).trim();
 }
 
-export async function publishImage({ image, version, expectedId, username, token }, { docker = runDocker, fetchImpl = fetch } = {}) {
-  parseCustomVersion(version);
+function customImageTag(version) {
+  return parseCustomVersion(version).version.slice(1);
+}
+
+export async function publishImage(
+  { image, version, expectedId, username, token },
+  { docker = runDocker, fetchImpl = fetch, imageTag = customImageTag, compareVersions = compareCustomVersions } = {},
+) {
+  const tag = imageTag(version);
   const match = /^ghcr\.io\/([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*):(.+)$/.exec(image);
-  if (!match || match[2] !== version.slice(1) || !DIGEST_RE.test(expectedId)) throw new Error("Invalid tested image identity");
+  if (!match || match[2] !== tag || !DIGEST_RE.test(expectedId)) throw new Error("Invalid tested image identity");
   if (!username || !token) throw new Error("GHCR credentials are required");
   const repository = match[1];
   const base = `ghcr.io/${repository}`;
@@ -98,7 +105,7 @@ export async function publishImage({ image, version, expectedId, username, token
     const previousRef = `${base}@${previousDigest}`;
     docker(["pull", previousRef]);
     const previousVersion = inspect('{{index .Config.Labels "org.opencontainers.image.version"}}', previousRef);
-    const comparison = compareCustomVersions(version, previousVersion);
+    const comparison = compareVersions(version, previousVersion);
     if (comparison < 0)
       return { image, digestRef, latestImage, latestDigestRef: previousRef, latestVersion: previousVersion, latestStatus: "kept-newer" };
     if (comparison === 0) {
