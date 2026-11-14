@@ -42,6 +42,10 @@ function mountSidebar(opts?: { rail?: boolean; su?: boolean; perms?: string[]; d
   })
 }
 
+function railGroups(wrapper: ReturnType<typeof mountSidebar>) {
+  return wrapper.findAll('[data-testid="rail-group"]').map((group) => group.get('div').text())
+}
+
 describe('SettingsSidebar', () => {
   it('keeps the back action icon-only in rail mode', () => {
     expect(mountSidebar().find('[data-testid="settings-sidebar-back"]').exists()).toBe(false)
@@ -62,7 +66,7 @@ describe('SettingsSidebar', () => {
   it('collapses to one popover per group when the sidebar is a rail', () => {
     const wrapper = mountSidebar({ rail: true, su: true })
     expect(wrapper.findComponent({ name: 'SettingsNav' }).exists()).toBe(false)
-    expect(wrapper.findAll('[data-testid="rail-group"]')).toHaveLength(5)
+    expect(railGroups(wrapper)).toEqual(['You', 'Library', 'Devices', 'Accounts', 'Server', 'Custom Patches'])
   })
 
   it('flattens nested destinations into the rail popovers', () => {
@@ -87,9 +91,9 @@ describe('SettingsSidebar', () => {
 
   it('only shows groups the user has access to', () => {
     const personal = mountSidebar({ rail: true })
-    expect(personal.findAll('[data-testid="rail-group"]')).toHaveLength(2)
+    expect(railGroups(personal)).toEqual(['You', 'Library', 'Custom Patches'])
     expect(personal.findAll('[data-testid="settings-sidebar-rail-item"]').map((node) => node.text())).toContain('Missing-field reminders')
-    expect(mountSidebar({ rail: true, perms: ['manage_libraries'] }).findAll('[data-testid="rail-group"]')).toHaveLength(2)
+    expect(railGroups(mountSidebar({ rail: true, perms: ['manage_libraries'] }))).toEqual(['You', 'Library', 'Custom Patches'])
   })
 
   it('applies notification access rules in collapsed rail mode', () => {

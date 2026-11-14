@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const apiMock = vi.hoisted(() => vi.fn<(...args: [RequestInfo | URL, RequestInit?]) => Promise<unknown>>())
 
 vi.mock('@/lib/api', () => ({ api: apiMock }))
+vi.mock('@/features/auth/composables/useAuth', async () => {
+  const { ref } = await import('vue')
+  return { useAuth: () => ({ user: ref({ id: 7 }) }) }
+})
 
 function response(body: unknown, ok = true): Pick<Response, 'json' | 'ok'> {
   return {

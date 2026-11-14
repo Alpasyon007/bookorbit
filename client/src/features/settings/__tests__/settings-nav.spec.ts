@@ -50,13 +50,13 @@ describe('settings navigation model', () => {
 
 describe('visibleSettingsNav', () => {
   it('drops groups with no reachable destination', () => {
-    expect(visibleSettingsNav(NOBODY).map((group) => group.id)).toEqual(['you', 'library'])
+    expect(visibleSettingsNav(NOBODY).map((group) => group.id)).toEqual(['you', 'library', 'custom-patches'])
     const library = visibleSettingsNav(NOBODY).find((group) => group.id === 'library')
     expect(library?.items.flatMap((item) => item.children?.map((child) => child.id) ?? [item.id])).toEqual(['metadata-reminders'])
   })
 
   it('keeps every group for a superuser', () => {
-    expect(visibleSettingsNav(SUPERUSER).map((group) => group.id)).toEqual(['you', 'library', 'devices', 'accounts', 'server'])
+    expect(visibleSettingsNav(SUPERUSER).map((group) => group.id)).toEqual(['you', 'library', 'devices', 'accounts', 'server', 'custom-patches'])
   })
 
   it('hides only request administration when Requests are hidden', () => {
