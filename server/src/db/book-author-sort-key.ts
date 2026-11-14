@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQLWrapper } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 import * as schema from './schema';
@@ -17,8 +17,12 @@ function intArray(ids: number[]) {
   )}]::int[]`;
 }
 
+export function authorSortName(sortName: SQLWrapper, name: SQLWrapper) {
+  return sql`NULLIF(btrim(COALESCE(${sortName}, ${name})), '')`;
+}
+
 const primaryAuthorSortKeySql = sql`
-  SELECT NULLIF(btrim(COALESCE(a.sort_name, a.name)), '')
+  SELECT ${authorSortName(sql`a.sort_name`, sql`a.name`)}
   FROM book_authors ba
   INNER JOIN authors a ON a.id = ba.author_id
   WHERE ba.book_id = b.id

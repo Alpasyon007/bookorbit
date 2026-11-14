@@ -632,6 +632,7 @@ export class BookRepository {
     offset: number;
     userId: number;
     collapseLinked: boolean;
+    sortByAuthor: boolean;
   }) {
     const visibleWhere = this.visibleWhere(opts.where);
     const link = this.seriesCollapseLinkParts(visibleWhere, opts.collapseLinked);
@@ -641,7 +642,7 @@ export class BookRepository {
       has_children: boolean | null;
       total: string;
       book_total: string;
-    }>(buildSeriesGridPageSql(link, opts.orderBy, opts.limit, opts.offset));
+    }>(buildSeriesGridPageSql(link, opts.orderBy, opts.limit, opts.offset, opts.sortByAuthor));
     const entries = result.rows.filter((row) => row.id !== null);
     const ids = entries.map((row) => Number(row.id));
     const cards = await this.findCardsByBookIds(ids, opts.userId);

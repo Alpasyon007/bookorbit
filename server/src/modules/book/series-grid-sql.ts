@@ -12,7 +12,13 @@ export const seriesGridGroupKey = sql<string>`case
   else 'none'
 end`;
 
-export function buildSeriesGridPageSql(link: { prefixCte: SQL; where: SQL; addFolded: SQL }, orderBy: SQL[], limit: number, offset: number): SQL {
+export function buildSeriesGridPageSql(
+  link: { prefixCte: SQL; where: SQL; addFolded: SQL },
+  orderBy: SQL[],
+  limit: number,
+  offset: number,
+  sortByAuthor = false,
+): SQL {
   return sql`
       WITH ${link.prefixCte}
       ranked AS MATERIALIZED (
@@ -21,6 +27,18 @@ export function buildSeriesGridPageSql(link: { prefixCte: SQL; where: SQL; addFo
         FROM books
         LEFT JOIN book_metadata ON book_metadata.book_id = books.id
         LEFT JOIN book_series ON ${seriesGridSeriesJoin}
+        ${
+          sortByAuthor
+            ? sql`
+          LEFT JOIN LATERAL (
+            SELECT ba.author_id FROM book_authors ba
+            WHERE ba.book_id = books.id
+            ORDER BY ba.display_order ASC, ba.author_id ASC LIMIT 1
+          ) grid_primary_author ON true
+          LEFT JOIN authors grid_author ON grid_author.id = grid_primary_author.author_id
+        `
+            : sql``
+        }
         LEFT JOIN LATERAL (
           SELECT coalesce(members.keys, ARRAY[${seriesGridGroupKey}]) AS keys,
             coalesce(members.labels, ARRAY[${seriesGridGroupLabel}]) AS labels,

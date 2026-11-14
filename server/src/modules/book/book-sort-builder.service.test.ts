@@ -133,6 +133,22 @@ describe('BookSortBuilder', () => {
     expect(raw).toHaveBeenCalledWith('ASC');
   });
 
+  it('uses the canonical first credited author only for grouped sorting', () => {
+    const result = service.build(
+      [
+        { field: 'author', dir: 'asc' },
+        { field: 'publishedYear', dir: 'desc' },
+      ],
+      7,
+      undefined,
+      { groupBySeries: true },
+    );
+    expect(result).toHaveLength(3);
+    expect(result[0]?.values[0]).toMatchObject({ text: expect.stringContaining('NULLIF(btrim(COALESCE') });
+    expect(result[0]?.values[0].values.map((value: { text: string }) => value.text)).toEqual(['grid_author.sort_name', 'grid_author.name']);
+    expect(result[1]?.values[1]).toMatchObject({ value: 'DESC' });
+  });
+
   it('builds fileSize sort with a correlated subquery', () => {
     const raw = (sql as unknown as { raw: vi.Mock }).raw;
 

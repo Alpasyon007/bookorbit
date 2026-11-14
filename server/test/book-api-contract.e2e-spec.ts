@@ -10,7 +10,7 @@ import { Permission, type BooksPage } from '@bookorbit/types';
 import { appSettings } from '../src/db/schema/auth';
 import { bookCovers } from '../src/db/schema/book-covers';
 import { bookFiles, books } from '../src/db/schema/books';
-import { bookMetadata } from '../src/db/schema/metadata';
+import { authors, bookAuthors, bookMetadata } from '../src/db/schema/metadata';
 import { bookLinks, bookLinkGroups } from '../src/db/schema/book-links';
 import { bookSeries, bookSeriesMemberships } from '../src/db/schema/series';
 import { libraries } from '../src/db/schema/libraries';
@@ -289,6 +289,103 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
         inArray(
           bookSeries.id,
           series.map((row) => row.id),
+        ),
+      );
+      await closeMetadataWriteE2EContext(ctx);
+    }
+  });
+});
+
+describe('Series Grid canonical author ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
+  it('uses current first credited author and retains layered year ordering despite stale cached keys', async () => {
+    const ctx = await createMetadataWriteE2EContext();
+    const library = await createLibraryWithFolder(ctx);
+    const reader = await createUserAndLogin(ctx);
+    await grantLibraryAccess(ctx, reader.userId, library.libraryId, 'viewer');
+    const suffix = randomUUID();
+    const series = await ctx.db
+      .insert(bookSeries)
+      .values(
+        ['Universe', 'Early', 'Late', 'Unknown', 'Other', 'Blank', 'Tie', 'Missing'].map((name) => ({
+          name,
+          normalizedName: `${name.toLowerCase()}-${suffix}`,
+        })),
+      )
+      .returning({ id: bookSeries.id });
+    const people = await ctx.db
+      .insert(authors)
+      .values([
+        { name: `Zeta ${suffix}`, sortName: 'Alpha' },
+        { name: `Alpha ${suffix}`, sortName: 'Zulu' },
+        { name: `Blank ${suffix}`, sortName: '' },
+      ])
+      .returning({ id: authors.id });
+    async function seed(title: string, child: number, year: number | null, cache: string | null, personIds: number[]) {
+      const [book] = await ctx.db
+        .insert(books)
+        .values({
+          libraryId: library.libraryId,
+          libraryFolderId: library.libraryFolderId,
+          folderPath: join(library.folderPath, title),
+          primaryAuthorSortName: cache,
+        })
+        .returning({ id: books.id });
+      await ctx.db.insert(bookMetadata).values({ bookId: book!.id, title, publishedYear: year });
+      await ctx.db
+        .insert(bookSeriesMemberships)
+        .values([0, child].map((index, displayOrder) => ({ bookId: book!.id, seriesId: series[index]!.id, displayOrder })));
+      if (personIds.length)
+        await ctx.db
+          .insert(bookAuthors)
+          .values(personIds.map((index, displayOrder) => ({ bookId: book!.id, authorId: people[index]!.id, displayOrder })));
+      return book!.id;
+    }
+    async function list(payload: Record<string, unknown>): Promise<BooksPage> {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/v1/libraries/${library.libraryId}/books`,
+        headers: authHeader(reader.accessToken),
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      return response.json();
+    }
+    try {
+      const early = await seed('Target early', 1, 2001, 'ZZ stale', [0, 1]);
+      const laterEarly = await seed('Target early later', 1, 2020, 'ZZ stale', [0]);
+      const late = await seed('Target late', 2, 2011, 'AA stale', [0]);
+      const unknown = await seed('Unknown date', 3, null, 'AA stale', [0]);
+      const other = await seed('Other author', 4, 1990, 'AA stale', [1, 0]);
+      const blank = await seed('Blank author', 5, 1980, 'AA stale', [2]);
+      const sort = [
+        { field: 'author', dir: 'asc' },
+        { field: 'publishedYear', dir: 'asc' },
+        { field: 'title', dir: 'desc' },
+      ];
+      const pages = await Promise.all([0, 1, 2, 3, 4, 5].map((page) => list({ groupBySeries: true, sort, pagination: { page, size: 1 } })));
+      expect(pages.flatMap((page) => page.items).map((card) => card.id)).toEqual([early, laterEarly, late, unknown, other, blank]);
+      const descendingYear = await list({ groupBySeries: true, sort: [sort[0], { field: 'publishedYear', dir: 'desc' }] });
+      expect(descendingYear.items.map((card) => card.id)).toEqual([laterEarly, early, late, unknown, other, blank]);
+      const descendingAuthor = await list({ groupBySeries: true, sort: [{ field: 'author', dir: 'desc' }, sort[1]] });
+      expect(descendingAuthor.items.map((card) => card.id)).toEqual([other, early, laterEarly, late, unknown, blank]);
+      const filtered = await list({ groupBySeries: true, sort, q: 'Target' });
+      expect(filtered.items.map((card) => card.id)).toEqual([early, laterEarly, late]);
+      const tied = await seed('Target zulu', 6, 2001, 'ZZ stale', [0]);
+      const missing = await seed('Missing author', 7, 1970, 'AA stale', []);
+      const withTies = await list({ groupBySeries: true, sort });
+      expect(withTies.items.map((card) => card.id)).toEqual([tied, early, laterEarly, late, unknown, other, missing, blank]);
+    } finally {
+      await ctx.db.delete(libraries).where(eq(libraries.id, library.libraryId));
+      await ctx.db.delete(bookSeries).where(
+        inArray(
+          bookSeries.id,
+          series.map((row) => row.id),
+        ),
+      );
+      await ctx.db.delete(authors).where(
+        inArray(
+          authors.id,
+          people.map((row) => row.id),
         ),
       );
       await closeMetadataWriteE2EContext(ctx);

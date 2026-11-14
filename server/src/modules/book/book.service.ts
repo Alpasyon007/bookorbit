@@ -1360,7 +1360,11 @@ export class BookService {
     let bookTotal: number | undefined;
     let cardPage: Awaited<ReturnType<BookRepository['findCards']>>;
     if (query.groupBySeries) {
-      const grouped = await this.bookRepo.findSeriesGridCards({ ...cardQuery, collapseLinked });
+      const grouped = await this.bookRepo.findSeriesGridCards({
+        ...cardQuery,
+        collapseLinked,
+        sortByAuthor: query.sort.some((tier) => tier.field === 'author'),
+      });
       cardPage = grouped;
       bookTotal = grouped.bookTotal;
     } else if (collapseLinked) {

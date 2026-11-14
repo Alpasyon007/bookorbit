@@ -15,6 +15,7 @@ import {
   narrators,
 } from '../../db/schema';
 import { seriesIndexOrderBy } from '../../common/utils/series-index-sql.utils';
+import { authorSortName } from '../../db/book-author-sort-key';
 
 export type BookSortContext = {
   defaultCollectionId?: number;
@@ -110,9 +111,11 @@ export class BookSortBuilder {
         result.push(sql`${bookMetadata.title} ASC NULLS LAST`);
         break;
       }
-      case 'author':
-        result.push(sql`${books.primaryAuthorSortName} ${sql.raw(D)} NULLS LAST`);
+      case 'author': {
+        const author = context?.groupBySeries ? authorSortName(sql`grid_author.sort_name`, sql`grid_author.name`) : books.primaryAuthorSortName;
+        result.push(sql`${author} ${sql.raw(D)} NULLS LAST`);
         break;
+      }
       case 'fileSize':
         result.push(sql.raw(`(SELECT bf.size_bytes FROM book_files bf WHERE bf.id = books.primary_file_id) ${D} NULLS LAST`));
         break;
