@@ -2,6 +2,22 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.9',
+    name: 'Custom revision 9: consistent author sorting in Series Grid',
+    date: '2026-11-14',
+    highlights: [
+      {
+        icon: 'LayoutGrid',
+        title: 'Consistent author sorting in Series Grid',
+        body: 'Series Grid uses the first credited author’s current sort name. Books by the same author follow your next sort choice, such as the publication year recorded in your library.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.9',
+    changelogBody:
+      '### Custom changes\n\n- Use the first credited author’s current sort name for the Author tier in Series Grid. Later sort tiers apply consistently when books share the same author sort name.\n\nBased on upstream v3.8.0. This change adds no database migration.',
+  },
+  {
     version: 'v3.8.0-custom.8',
     name: 'Custom revision 8: aligned Series Grid headings',
     date: '2026-11-14',
