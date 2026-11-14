@@ -86,7 +86,7 @@ beforeEach(() => {
 describe('series requests', () => {
   it('hides the feature panel under disabled instance policy', () => {
     patch.policy.value = { ...patch.defaultPolicy, seriesRequestsEnabled: false }
-    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn() } })
+    const wrapper = mount(SeriesRequestPanel, { props: { seed: { name: '', sequence: 0 }, onAcknowledged: vi.fn<() => void>() } })
     expect(wrapper.find('#series-search-title').exists()).toBe(false)
     wrapper.unmount()
   })
