@@ -1,6 +1,6 @@
 # Personal fork patch plan
 
-The fork is based on upstream `v3.8.0` (`450c18e2`). The working patch queue `codex/custom-3.8` targets `v3.8.0-custom.9` and adds no database migration or new dependency. Publication follows the release and upgrade gates in [FORK_WORKFLOW.md](FORK_WORKFLOW.md).
+The fork is based on upstream `v3.8.0` (`450c18e2`). The working patch queue `codex/custom-3.8` targets `v3.8.0-custom.10` and adds no database migration or new dependency. Publication follows the release and upgrade gates in [FORK_WORKFLOW.md](FORK_WORKFLOW.md).
 
 ## Patch boundaries
 
@@ -13,11 +13,30 @@ The fork is based on upstream `v3.8.0` (`450c18e2`). The working patch queue `co
 
 Series Grid uses each book's membership order as its path. The first membership is the outer heading and every later membership adds a level beneath it. A series can appear under different parents, and each matching book occupies one card. The server filters first, picks linked representatives from matching books, orders each sibling group by its first matching card under the complete requested sort and pages the resulting rows. Series compares ordered membership names. Series index uses the innermost membership's position. When a series has visible subseries, its directly assigned books appear under a local Standalone heading after those subseries. The server determines which subseries are visible from the full filtered result. Books with no series appear under the main Standalone heading at the end of the grid. The client compares full paths across adjacent loaded pages to keep each group under one heading and fill partial rows at the current column count.
 
-The catalog uses actual Hardcover series members and stable work slugs, not inferred library gaps. Eligible books start selected. Unchecking books excludes their IDs across preview pages. Clear selection starts a subset, and Request selected books uses those choices. Request all walks every page independently of the checkboxes. Both actions recheck availability for the chosen format and use ordinary per-book submission routes. They skip owned books and existing subscriptions, join existing requests and report created, joined, skipped and unknown-date counts. They exclude books marked as compilations by Hardcover, future books and books with unknown release dates. Fractional positions remain visible and are omitted from the legacy integer request field. Requesters can select a destination library, folder and language under instance defaults and ordinary approval and permission rules. The operation runs in the browser, so keep the panel open and retry after interruption or a failure. Retry rechecks availability and uses existing deduplication. Provider errors and incomplete processing are shown in the panel. The Hardcover GraphQL schema and row limits describe its [catalog contract](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/schema.graphql) and [row limits](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/row-limits.json). Authenticated read-only tests confirmed indexed series search and two member pages with a temporary catalog-only token. The same token successfully enabled the provider through the isolated instance configuration API.
+The catalog uses actual Hardcover series members and stable work slugs, not inferred library gaps. Eligible books start selected by default. Unchecking books excludes their IDs across preview pages. Clear selection starts a subset, and Request selected books uses those choices. Request all walks every page independently of the checkboxes. Both actions recheck availability for the chosen format and use ordinary per-book submission routes. They skip owned books and existing subscriptions, join existing requests and report created, joined, skipped and unknown-date counts. They exclude books marked as compilations by Hardcover, future books and books with unknown release dates. Fractional positions remain visible and are omitted from the legacy integer request field. Requesters can select a destination library, folder and language under instance defaults and ordinary approval and permission rules. The operation runs in the browser, so keep the panel open and retry after interruption or a failure. Retry rechecks availability and uses existing deduplication. Provider errors and incomplete processing are shown in the panel. The Hardcover GraphQL schema and row limits describe its [catalog contract](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/schema.graphql) and [row limits](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/row-limits.json). Authenticated read-only tests confirmed indexed series search and two member pages with a temporary catalog-only token. The same token successfully enabled the provider through the isolated instance configuration API.
+
+## Custom Patches settings
+
+Find Custom Patches below Server in Settings. Preferences saves the signed-in account's choices. Server controls sets availability for the whole installation and requires the App settings permission to edit. Server controls take precedence over personal choices, and the usual library and feature permissions still apply. Restore defaults updates the draft. Save changes applies it.
+
+| Feature                | Personal controls                                                                                                                                                                                                                                                                  | Server policy                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Series Grid            | Show the view. Choose forward or reverse membership hierarchy, library sort, reverse library sort, or series-name order. Set a heading depth limit, the position of books directly in a series, and the position and label of Standalone. Adjust heading indentation and dividers. | Offer Series Grid.               |
+| Sidebar links          | Choose whether to customize the footer and which GitHub, support, iOS and Android links to show. Turning customization off restores the original links.                                                                                                                            | Offer sidebar customization.     |
+| Series requests        | Show series search, choose ebook or audiobook as the starting format, start with all eligible books checked or none, and choose whether to show Request all.                                                                                                                       | Allow the series catalog routes. |
+| Extended cover sources | Include extended cover sources, choose Hachette UK, Waterstones and Foyles, and include compatible enabled metadata providers. These choices apply to direct cover searches and All Sources.                                                                                       | Allow extended cover sources.    |
+
+Defaults retain the previous behavior. Series Grid keeps the saved membership hierarchy, the library's sort, every heading level, direct and ungrouped books last, the localized Standalone label, aligned headings and dividers. Extra sidebar links stay hidden by default. Series requests start in ebook format with eligible books selected and Request all visible. Retailer and compatible metadata cover sources remain available under the existing permissions. Core cover searches and regular title requests remain available.
+
+The cover source preference remains in Settings > Appearance > Book Covers. Configure Hardcover and other metadata providers in Settings > Metadata > Providers. Request destination defaults remain in the server's Requests settings. The Custom Patches page links to these existing controls where the account has access.
+
+Settings reads and writes time out after 15 seconds. Retry a failed load from the settings page. Series requests refresh the effective settings before each batch of up to 25 books. If the settings cannot be checked or disable the action, the batch stops after any in-flight request and reports partial progress.
+
+The fork adapter lives in `server/src/modules/custom-patches/`, `client/src/features/custom-patches/` and `packages/types/src/custom-patches.ts`. It uses the existing user preferences and app settings storage. Port the adapter and reconnect the feature hooks through the shared settings contract.
 
 ## Port and verification
 
-Keep these four concerns independently reviewable and port them after the existing fork foundation and custom-version/release-notes adapters. The series request adapter depends on the existing Hardcover provider configuration and request lifecycle. The cover adapter depends on the metadata provider registry, HTTP-provider catalog, cover search and shared source contract. The Series Grid depends on book query windows, view preferences and the virtual grid. Review each upstream hook for changed signatures and behavior before replaying it.
+Keep these concerns independently reviewable and port them after the existing fork foundation and custom-version/release-notes adapters. The series request adapter depends on the existing Hardcover provider configuration and request lifecycle. The cover adapter depends on the metadata provider registry, HTTP-provider catalog, cover search and shared source contract. The Series Grid depends on book query windows, view preferences and the virtual grid. The Custom Patches adapter depends on the existing settings navigation, permissions, user preferences and app settings storage. Review each upstream hook for changed signatures and behavior before replaying it.
 
 1. Start a new patch branch at the next verified upstream stable tag. Replay the retained fork commits individually with `git cherry-pick -x`; omit any feature implemented upstream. Do not rewrite migration history. These patches require no migration.
 2. Resolve each hook against the new source, keeping fork helpers separate and changes to upstream files narrow. Recheck permissions, DTOs, response shapes, pagination, saved preferences and both desktop and mobile controls.
@@ -42,21 +61,22 @@ Hardcover explicitly bans `_ilike` and related filters even though they appear i
 
 ## Ledger
 
-| Patch                                         | Status                             | Schema | Upstream status                                  |
-| --------------------------------------------- | ---------------------------------- | ------ | ------------------------------------------------ |
-| Fork checks, custom version and bundled notes | Released through `v3.8.0-custom.8` | None   | Fork-specific adapters                           |
-| Sidebar footer                                | Implemented `cb47d785`             | None   | Reassess on next upstream release                |
-| Library Series Grid                           | Implemented `8e416fcb`             | None   | Reassess on next upstream release                |
-| Cover sources                                 | Implemented `686a5c85`             | None   | Reassess supported sources and provider contract |
-| Series requests                               | Implemented `e25f9181`             | None   | Reassess upstream series catalog and requests    |
-| Hardcover series and token fix                | Implemented `ec88cb7d`             | None   | Recheck indexed search and token scopes          |
-| Series request interface fix                  | Implemented `1d7c8e2e`             | None   | Recheck themed controls and responsive layout    |
-| Standalone grid label                         | Implemented `552f3634`             | None   | Recheck upstream series heading terminology      |
-| Series request selection                      | Implemented `51c831f0`, `dcaba4e0` | None   | Reassess upstream series request controls        |
-| Nested Series Grid                            | Implemented `b3be9196`             | None   | Reassess membership order and paginated layout   |
-| Standalone books within a series              | Implemented `cf487c5f`             | None   | Reassess direct-book grouping and paging         |
-| Series Grid page boundaries                   | Implemented `7444595a`             | None   | Recheck virtual row continuity across pages      |
-| Series Grid heading alignment                 | Implemented `4463fff6`             | None   | Recheck nested heading levels and alignment      |
-| Series Grid author sorting                    | Implemented `23e25092`             | None   | Recheck first credited author and later tiers    |
+| Patch                                         | Status                             | Schema | Upstream status                                   |
+| --------------------------------------------- | ---------------------------------- | ------ | ------------------------------------------------- |
+| Fork checks, custom version and bundled notes | Released through `v3.8.0-custom.9` | None   | Fork-specific adapters                            |
+| Sidebar footer                                | Implemented `cb47d785`             | None   | Reassess on next upstream release                 |
+| Library Series Grid                           | Implemented `8e416fcb`             | None   | Reassess on next upstream release                 |
+| Cover sources                                 | Implemented `686a5c85`             | None   | Reassess supported sources and provider contract  |
+| Series requests                               | Implemented `e25f9181`             | None   | Reassess upstream series catalog and requests     |
+| Hardcover series and token fix                | Implemented `ec88cb7d`             | None   | Recheck indexed search and token scopes           |
+| Series request interface fix                  | Implemented `1d7c8e2e`             | None   | Recheck themed controls and responsive layout     |
+| Standalone grid label                         | Implemented `552f3634`             | None   | Recheck upstream series heading terminology       |
+| Series request selection                      | Implemented `51c831f0`, `dcaba4e0` | None   | Reassess upstream series request controls         |
+| Nested Series Grid                            | Implemented `b3be9196`             | None   | Reassess membership order and paginated layout    |
+| Standalone books within a series              | Implemented `cf487c5f`             | None   | Reassess direct-book grouping and paging          |
+| Series Grid page boundaries                   | Implemented `7444595a`             | None   | Recheck virtual row continuity across pages       |
+| Series Grid heading alignment                 | Implemented `4463fff6`             | None   | Recheck nested heading levels and alignment       |
+| Series Grid author sorting                    | Implemented `23e25092`             | None   | Recheck first credited author and later tiers     |
+| Custom Patches settings                       | Implemented `9add7e84`             | None   | Recheck settings storage, scope and feature hooks |
 
 Record any upstream replacement here at the next upgrade.

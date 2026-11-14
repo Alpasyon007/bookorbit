@@ -2,6 +2,34 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.8.0-custom.10',
+    name: 'Custom revision 10: custom patch settings',
+    date: '2026-11-14',
+    highlights: [
+      {
+        icon: 'SlidersHorizontal',
+        title: 'Customize the fork in Settings',
+        body: 'Find Custom Patches below Server in Settings. Your preferences apply to your account. Administrators can set which custom features are available across the server.',
+        media: [],
+      },
+      {
+        icon: 'LayoutGrid',
+        title: 'Tailor Series Grid and the sidebar',
+        body: 'Choose the series hierarchy direction, depth and group order. Set where standalone books appear and adjust the headings. You can also choose which extra links appear in the sidebar footer.',
+        media: [],
+      },
+      {
+        icon: 'BookPlus',
+        title: 'Choose request defaults and cover sources',
+        body: 'Set the starting format and selection for series requests, and choose whether to show Request all. Choose which retailer and metadata sources appear in cover search, including All Sources.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.8.0-custom.10',
+    changelogBody:
+      '### Custom changes\n\n- Add personal preferences and administrator policy under Settings > Custom Patches. Defaults preserve the existing experience.\n- Configure Series Grid hierarchy direction, group order, depth, direct and ungrouped book placement, Standalone label, heading indentation and dividers.\n- Choose the GitHub, support, iOS and Android links shown in the sidebar footer.\n- Set the series request format and initial selection, and show or hide Request all. A batch rechecks saved settings before continuing and reports partial progress if interrupted.\n- Choose retailer and metadata cover sources. The same choices govern direct searches and All Sources. Default cover source and provider setup are available from the existing settings pages.\n\nBased on upstream v3.8.0. This change adds no database migrations or dependencies.',
+  },
+  {
     version: 'v3.8.0-custom.9',
     name: 'Custom revision 9: consistent author sorting in Series Grid',
     date: '2026-11-14',
