@@ -16,7 +16,14 @@ import type {
   TemporalJumpBucketUnit,
 } from '@bookorbit/types';
 import type { BookCard, BookCardLinkInfo, UnscopedBookRecommendation } from '@bookorbit/types';
-import { READ_ALONG_FORMAT_PRIORITY, getBookMediaKind, isAudioFormat, isComicFormat, normalizeCoverAspectRatio } from '@bookorbit/types';
+import {
+  PLAIN_EPUB_FILTER_FORMAT,
+  READ_ALONG_FORMAT_PRIORITY,
+  getBookMediaKind,
+  isAudioFormat,
+  isComicFormat,
+  normalizeCoverAspectRatio,
+} from '@bookorbit/types';
 import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
 import { rankFileRowsByBook } from '../../common/utils/primary-file-selection.utils';
 import { accentInsensitiveIlike } from '../../common/utils/accent-insensitive-search.utils';
@@ -37,6 +44,7 @@ import * as schema from '../../db/schema';
 import {
   authors,
   bookAuthors,
+  bookFileAudioTimelines,
   bookCommunityRatings,
   bookFiles,
   bookGenres,
@@ -68,6 +76,7 @@ import {
   tags,
   userBookStatus,
 } from '../../db/schema';
+import type { BookFileAudioTimelineRow, NewBookFileAudioTimelineRow } from '../../db/schema';
 
 type Db = NodePgDatabase<typeof schema>;
 type DbTransaction = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -579,7 +588,7 @@ export class BookRepository {
     const { where, orderBy, limit, offset, userId } = opts;
     const visibleWhere = this.visibleWhere(where);
 
-    const query = this.db
+    const rows = await this.db
       .select({
         id: books.id,
         libraryId: books.libraryId,
@@ -616,7 +625,6 @@ export class BookRepository {
       .orderBy(...orderBy)
       .limit(limit)
       .offset(offset);
-    const rows = await query;
 
     const total = rows.length > 0 ? rows[0]._total : await this.countWhere(visibleWhere);
 
@@ -736,13 +744,7 @@ export class BookRepository {
 
     const total = Number(first.total_count);
     const cardIds = page.rows.map((row) => Number(row.card_id));
-    const cards = await this.findCards({
-      where: inArray(books.id, cardIds),
-      orderBy: [],
-      limit: cardIds.length,
-      offset: 0,
-      userId,
-    });
+    const cards = await this.findCards({ where: inArray(books.id, cardIds), orderBy: [], limit: cardIds.length, offset: 0, userId });
     const position = new Map(cardIds.map((id, index) => [id, index]));
     const rows = cards.rows.slice().sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
     return { ...cards, rows, total, bookTotal: total + Number(first.folded_count) };
@@ -1682,8 +1684,12 @@ export class BookRepository {
         .innerJoin(authors, eq(authors.id, bookAuthors.authorId))
         .where(eq(bookAuthors.bookId, id))
         .orderBy(bookAuthors.displayOrder),
-      this.db.select({ name: genres.name }).from(bookGenres).innerJoin(genres, eq(genres.id, bookGenres.genreId)).where(eq(bookGenres.bookId, id)),
-      this.db.select({ name: tags.name }).from(bookTags).innerJoin(tags, eq(tags.id, bookTags.tagId)).where(eq(bookTags.bookId, id)),
+      this.db
+        .select({ id: genres.id, name: genres.name })
+        .from(bookGenres)
+        .innerJoin(genres, eq(genres.id, bookGenres.genreId))
+        .where(eq(bookGenres.bookId, id)),
+      this.db.select({ id: tags.id, name: tags.name }).from(bookTags).innerJoin(tags, eq(tags.id, bookTags.tagId)).where(eq(bookTags.bookId, id)),
       this.db
         .select({
           id: bookFiles.id,
@@ -1852,6 +1858,22 @@ export class BookRepository {
       .update(bookFiles)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(bookFiles.id, fileId));
+  }
+
+  async findAudioTimeline(fileId: number): Promise<BookFileAudioTimelineRow | null> {
+    const [row] = await this.db.select().from(bookFileAudioTimelines).where(eq(bookFileAudioTimelines.fileId, fileId)).limit(1);
+    return row ?? null;
+  }
+
+  async saveAudioTimeline(row: NewBookFileAudioTimelineRow): Promise<void> {
+    const measuredAt = new Date();
+    await this.db
+      .insert(bookFileAudioTimelines)
+      .values({ ...row, measuredAt })
+      .onConflictDoUpdate({
+        target: bookFileAudioTimelines.fileId,
+        set: { sizeBytes: row.sizeBytes, mtimeMs: row.mtimeMs, totalSeconds: row.totalSeconds ?? null, measuredAt },
+      });
   }
 
   async updateBookPrimaryFile(bookId: number, primaryFileId: number | null): Promise<void> {
@@ -2179,6 +2201,9 @@ export class BookRepository {
         UNION ALL
         SELECT ${READ_ALONG_FORMAT_PRIORITY}
         WHERE facet_file.format = 'epub' AND facet_file.media_overlay_available = true
+        UNION ALL
+        SELECT ${PLAIN_EPUB_FILTER_FORMAT}
+        WHERE facet_file.format = 'epub' AND facet_file.media_overlay_available = false
       ) AS facet_key
       WHERE ${this.visibleWhere(where)}
         AND facet_key.format IN (${sql.join(

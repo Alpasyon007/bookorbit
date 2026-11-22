@@ -1,6 +1,6 @@
 # Personal fork patch plan
 
-The fork is based on upstream `v3.8.0` (`450c18e2`). The working patch queue `codex/custom-3.8` targets `v3.8.0-custom.11`. This update adds no app dependency or database migration. The optional UK metadata companion has its own dependencies and release version `0.1.0`. Publication follows the release and upgrade gates in [FORK_WORKFLOW.md](FORK_WORKFLOW.md).
+The fork integrates official upstream `v3.9.0` (`c1dd6b4f1947ff50843a155e12e70f1e7d15f0c7`) into the published custom patch history with a merge. The working branch `codex/custom-3.9` targets `v3.9.0-custom.1`, dated 22 November 2026. Upstream database migrations 0143 through 0161 apply on upgrade; custom patches add no separate migrations. The optional UK metadata companion remains independent at `0.1.0`. Publication requires the release and upgrade gates in [FORK_WORKFLOW.md](FORK_WORKFLOW.md).
 
 ## Patch boundaries
 
@@ -51,7 +51,7 @@ Allow the private address for this trusted service, set the Authorization header
 
 Keep these concerns independently reviewable and port them after the existing fork foundation and custom-version/release-notes adapters. The series request adapter depends on the existing Hardcover provider configuration and request lifecycle. The cover adapter depends on the metadata provider registry, HTTP-provider catalog, cover search and shared source contract. The Series Grid depends on book query windows, view preferences and the virtual grid. The Custom Patches adapter depends on the existing settings navigation, permissions, user preferences and app settings storage. Review each upstream hook for changed signatures and behavior before replaying it.
 
-1. Start a new patch branch at the next verified upstream stable tag. Replay the retained fork commits individually with `git cherry-pick -x`; omit any feature implemented upstream. Do not rewrite migration history. These patches require no migration.
+1. For this integration, merge the verified upstream v3.9.0 tag into the retained custom history as described in FORK_WORKFLOW.md. A future alternative is to start at a verified stable tag and replay retained commits individually with `git cherry-pick -x`, omitting upstream replacements. Preserve applied migration history. The custom patches add no separate migrations; this upstream upgrade applies 0143 through 0161.
 2. Resolve each hook against the new source, keeping fork helpers separate and changes to upstream files narrow. Recheck permissions, DTOs, response shapes, pagination, saved preferences and both desktop and mobile controls.
 3. Run the focused feature tests and the complete fork checks in [FORK_WORKFLOW.md](FORK_WORKFLOW.md). The mandatory database suites include the native external provider contract. Check fresh install and previous-release upgrade on disposable databases. Use a configured test Hardcover account for a real preview and interrupted retry.
 4. Test the companion separately, including registration, cover searches and upstream failures. Confirm Series Grid stays bounded and virtualized on a large library, preserves filters and sorting across windows, and keeps view settings per user.
@@ -59,7 +59,7 @@ Keep these concerns independently reviewable and port them after the existing fo
 
 Focused checks used during implementation include `pnpm --dir server exec vitest run src/modules/metadata-fetch/series-catalog.service.test.ts`, `pnpm --dir client exec vitest run src/features/book-requests/__tests__/SeriesRequestPanel.spec.ts src/features/book-requests/__tests__/useSeriesRequests.spec.ts`, and `pnpm --dir server exec vitest run src/modules/release-notes/custom-releases/custom-releases.test.ts`. The full test and E2E gate must still pass before release.
 
-## Verification reported for the working tree
+## Historical verification on the 3.8 custom branch
 
 - Sidebar and Series Grid: 152 client tests and 667 server tests passed in the reported focused runs. The Series Grid book API contract also passed against a disposable PostgreSQL database, including grouped queries. The client run covered the footer, mobile view controls, virtual grid, window handling and large-library layout.
 - Cover sources: 377 server tests and 57 client tests passed in the reported focused runs. Authenticated application searches and proxied images were checked for Hachette UK, Waterstones, Foyles and Open Library. External index coverage and rate limits can change. Server command: `pnpm --dir server exec vitest run src/modules/cover src/modules/metadata-fetch/metadata-cover-search.service.test.ts src/modules/metadata-fetch/metadata-fetch.service.test.ts src/modules/user-preferences/user-preferences.service.test.ts`. Client command: `pnpm --dir client exec vitest run src/features/book/components/detail/tabs/CoverSearchDrawer.test.ts src/features/book/components/detail/tabs/CoverEditorPanel.spec.ts`; these two suites contain the 57 tests.
@@ -94,3 +94,25 @@ Hardcover explicitly bans `_ilike` and related filters even though they appear i
 | Custom Patches settings                       | Implemented `9add7e84`              | None   | Recheck settings storage, scope and feature hooks               |
 
 Record any upstream replacement here at the next upgrade.
+
+## Upstream 3.9.0 integration
+
+The official base is `c1dd6b4f1947ff50843a155e12e70f1e7d15f0c7`. The fork retains its published custom history with a merge rather than replaying already published commits. Release target: `v3.9.0-custom.1` and the same verified image under `latest`. The UK metadata companion remains independently released at `0.1.0`.
+
+Upstream migrations 0143 through 0161 are retained unchanged, including their snapshots and journal. The release gate checks a fresh database and an upgrade from the pinned custom.11 image with synthetic users, library, book, fractional series membership and preferences, followed by an idempotent restart. This does not test a production backup or replace deployment backups. Index creation can take longer on populated databases.
+
+Upstream now inventories the download-client validation route; remove only that duplicate from the fork inventory and preserve custom routes. Keep new AppInfo AI service dependencies when reconnecting custom version parsing. No new upstream workflow files or metadata HTTP-provider protocol changes were found. Keep upstream publishing and maintenance workflows disabled; the enabled fork workflows are Custom Image, Fork Checks and UK Metadata Provider.
+
+| Patch family                                                     | 3.9.0 decision                                            |
+| ---------------------------------------------------------------- | --------------------------------------------------------- |
+| Fork checks and publisher                                        | Retain, add previous-release upgrade gate                 |
+| Custom version and bundled notes                                 | Retain, preserve new upstream AppInfo dependencies        |
+| Sidebar footer preferences                                       | Retain                                                    |
+| Nested Series Grid and pagination fixes                          | Retain                                                    |
+| Metadata cover sources and retired retailer preference migration | Retain                                                    |
+| UK metadata companion                                            | Retain independent 0.1.0, no protocol change              |
+| Hardcover series requests, selection and token fix               | Retain                                                    |
+| Custom Patches preferences and server policy                     | Retain                                                    |
+| Download-client validation inventory workaround                  | Remove only duplicate route entry, upstream now covers it |
+
+The upstream 3.9.0 SortPanel, FilterPanel, request-list and sidebar features are retained. Custom behavior connects through narrow hooks that preserve those upstream controls.

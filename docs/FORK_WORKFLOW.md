@@ -7,11 +7,11 @@ This fork tracks upstream (`bookorbit/bookorbit`) stable releases and carries a 
 | Branch             | Purpose                                                                                                                               |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `main`             | Reserved for an upstream mirror. Fast-forward only; never add custom commits.                                                         |
-| `codex/custom-3.8` | Current patch queue: `v3.8.0` plus fork maintenance changes.                                                                          |
+| `codex/custom-3.9` | Current patch queue: `v3.9.0` plus fork maintenance changes.                                                                          |
 | `custom/3.6`       | Previous patch queue, preserved for reference.                                                                                        |
 | feature branch     | One patch, based on the current patch queue. Use `BO-<issue>-<description>` when linked to an issue, otherwise `codex/<description>`. |
 
-The current stable base is `v3.8.0` (`450c18e2`), published on 11 November 2026. The previous fork changes were replayed with `cherry-pick -x`; upstream migration history still matches the tag. The released fork includes the sidebar, Series Grid, cover-source and series-request patches. See [PATCH_PLAN.md](PATCH_PLAN.md) for their boundaries and subsequent fixes.
+The current stable base is official `v3.9.0` (`c1dd6b4f1947ff50843a155e12e70f1e7d15f0c7`). The upgrade merges that tag into the retained custom patch history with `git merge --no-commit --no-ff v3.9.0`; upstream migration history remains unchanged. The next fork release is `v3.9.0-custom.1`, dated 22 November 2026. The released fork includes the sidebar, Series Grid, cover-source and series-request patches. See [PATCH_PLAN.md](PATCH_PLAN.md) for their boundaries and subsequent fixes.
 
 `upstream/main` can contain unreleased changes. Updating its mirror must not change the base of the patch queue. This checkout's `main` and `origin/main` still point at the previous `99aa7dce` snapshot; advancing them is separate from updating the stable patch branch.
 
@@ -46,7 +46,7 @@ The hyphenated label is accepted by Docker tags and uses SemVer's suffix syntax.
 
 Pushing a tag matching `v*.*.*-custom.*` runs `.github/workflows/custom-image.yml`. The shared validator in `scripts/fork/release-version.mjs` requires the exact custom format before checks and again before publication. The Dockerfile receives the full tag as `APP_VERSION`; images carry fork source, commit and version labels. Branch pushes do not publish an image.
 
-The workflow builds the app for **linux/amd64 only**. Publishing depends on the reusable fork checks passing for the exact tagged commit. Add arm64 only if the deployment host needs it. The read-aloud worker is a separate image: while unmodified, pin `READ_ALOUD_WORKER_IMAGE=ghcr.io/bookorbit/bookorbit-read-aloud-worker:3.8.0` when using that optional service.
+The workflow builds the app for **linux/amd64 only**. Publishing depends on the reusable fork checks passing for the exact tagged commit. Add arm64 only if the deployment host needs it. The read-aloud worker is a separate image: while unmodified, pin `READ_ALOUD_WORKER_IMAGE=ghcr.io/bookorbit/bookorbit-read-aloud-worker:3.9.0` when using that optional service.
 
 ### Automated publishing gate
 
@@ -57,7 +57,7 @@ The required checks are:
 1. Frozen dependency installation using the Node version from `Dockerfile` and pnpm pin from `package.json`.
 2. Fork formatting, workflow validation and failure-path tests; application lint, type checks, unit tests, and client/server production builds.
 3. `book-api-contract`, `authorization-matrix`, `book-requests` and `metadata-http-providers` E2E suites, each using its own disposable PostgreSQL 18/pgvector service. Empty test selections fail.
-4. Build the production image without publishing, then run its real entrypoint against a fresh disposable database. Verify migration/startup, initial setup, login/session, empty library browsing/search, app version, and built client assets.
+4. Build the production image without publishing, then run its real entrypoint against a fresh disposable database. Upgrade a separate synthetic custom.11 database with the same image, verify users, libraries, books, series and preferences survive, and verify a second startup does not reapply migrations. Verify migration/startup, initial setup, login/session, empty library browsing/search, app version, and built client assets.
 5. A final gate requires every job to report `success`. Failed, cancelled, skipped or missing checks block publication.
 
 On a release tag, the smoke-tested image is saved as a one-day artifact. Only after the gate passes can the separate publishing job download that run's archive, verify the loaded Docker image ID and revision/version labels, log in to GHCR and push it. It then pulls the published image and verifies the same image ID. `scripts/fork/publish-image.mjs` checks the existing `latest` through authenticated GHCR requests and promotes it only when appropriate, verifying the alias digest and image ID before recording success. Registry/authentication failures block promotion; only an explicit missing-manifest response permits the first alias. The job summary records the versioned image and alias digests. There is no second build. Verification jobs have only `contents: read`; only publishing receives `packages: write`. Branch and PR runs cannot publish. No manual publish bypass is provided.
@@ -89,9 +89,9 @@ Custom release notes are another small adapter: `server/src/modules/release-note
 
 Before each custom release, add its user-facing highlights and full change description to `custom-releases/catalog.ts`, with the exact Git tag, release date and fork source link. Include actual delivered changes, not planned features. The container smoke test disables external update checks on its disposable instance and requires useful notes for the exact release tag, so a missing entry blocks publication. Keep the catalog, helper tests, service integration and client comparator together when porting this patch. No database migration or extra GitHub release feed is required.
 
-The v3.8.0 authorization test inventory omits `POST /admin/download-clients/validate`. A separate compatibility patch adds `server/test/e2e/authorization-matrix/route-inventory/routes-fork.json` and registers it through the inventory manifest. It preserves the existing parity assertion and adds the route to the permission/API-key probes. On each upstream upgrade, check whether upstream now inventories the route; if so, drop the fork chunk and its manifest registration. Do not add it to the uncovered-route baseline or skip the failing test.
+Historical compatibility: the v3.8.0 authorization test inventory omitted `POST /admin/download-clients/validate`. A separate compatibility patch adds `server/test/e2e/authorization-matrix/route-inventory/routes-fork.json` and registers it through the inventory manifest. It preserves the existing parity assertion and adds the route to the permission/API-key probes. On each upstream upgrade, check whether upstream now inventories the route; if so, remove only the duplicate route entry while retaining the custom route inventory and manifest registration. Do not add it to the uncovered-route baseline or skip the failing test.
 
-For the in-progress footer, Series Grid, cover sources and series requests, see [PATCH_PLAN.md](PATCH_PLAN.md) for exact helpers, hooks, dependencies and acceptance checks. Keep implementation in a named feature/service/composable and use the owning module's exported interface. Prefer existing HTTP metadata providers or indexer plugins for source integrations. Keep upstream wiring changes small and identifiable; avoid copying whole upstream components or querying another module's database internals. Preserve shared types, ownership/permission checks and stable persisted IDs. Each patch needs its own acceptance tests and a ledger entry describing its injection points. Do not introduce a general plugin framework until an actual feature requires it.
+For the retained footer, Series Grid, cover sources and series requests, see [PATCH_PLAN.md](PATCH_PLAN.md) for exact helpers, hooks, dependencies and acceptance checks. Keep implementation in a named feature/service/composable and use the owning module's exported interface. Prefer existing HTTP metadata providers or indexer plugins for source integrations. Keep upstream wiring changes small and identifiable; avoid copying whole upstream components or querying another module's database internals. Preserve shared types, ownership/permission checks and stable persisted IDs. Each patch needs its own acceptance tests and a ledger entry describing its injection points. Do not introduce a general plugin framework until an actual feature requires it.
 
 Use Node >=24 and the pinned `pnpm@11.28.9`; upstream CI and Docker use Node 26. Run from the repository root:
 
@@ -107,12 +107,12 @@ Also run the E2E suites relevant to the patch, selected from `scripts/e2e/suite-
 After verification, an example first release is:
 
 ```bash
-git switch codex/custom-3.8
-git tag -a v3.8.0-custom.1 -m "custom build 3.8.0-custom.1"
-git push origin codex/custom-3.8 v3.8.0-custom.1
+git switch codex/custom-3.9
+git tag -a v3.9.0-custom.1 -m "custom build 3.9.0-custom.1"
+git push origin codex/custom-3.9 v3.9.0-custom.1
 ```
 
-Deploy with `APP_IMAGE=ghcr.io/alpasyon007/bookorbit:3.8.0-custom.1` in the deployment environment, or pin the tested image digest. Do not use upstream image names for fork builds.
+Deploy with `APP_IMAGE=ghcr.io/alpasyon007/bookorbit:3.9.0-custom.1` in the deployment environment, or pin the tested image digest. Do not use upstream image names for fork builds.
 
 Production Compose uses PostgreSQL 18 with pgvector. The app entrypoint applies database migrations before startup; there is no separate migration job. Before upgrading a running instance, back up the database and app data and test the upgrade on a restored copy. The v3.6.0 to v3.8.0 upgrade includes migrations 0132 through 0142; **0132 removes podcast tables and data**. Record the previous image digest and database backup together, because image rollback alone does not reverse migrations. Updating this repository does not deploy it or migrate an existing database.
 
@@ -130,7 +130,7 @@ Only push the mirror after checking the fork's workflow state below. Do not depl
 ### Picking up a fix before the next stable release
 
 ```bash
-git switch codex/custom-3.8
+git switch codex/custom-3.9
 git cherry-pick -x <sha-from-upstream-main>
 ```
 
@@ -138,15 +138,15 @@ git cherry-pick -x <sha-from-upstream-main>
 
 ### Moving to a new stable release
 
+For this release the published custom history is preserved rather than replayed:
+
 ```bash
-git fetch upstream --tags
-git switch -c codex/custom-3.9 v3.9.0
-git cherry-pick -x <retained-patch-commit-1> <retained-patch-commit-2>
-pnpm install --frozen-lockfile
-pnpm verify
+git switch -c codex/custom-3.9 v3.8.0-custom.11
+git merge --no-commit --no-ff v3.9.0
+# Resolve the reviewed hooks, run all gates, then commit the integration.
 ```
 
-The commands illustrate a future v3.9.0 upgrade, not a release already available. First fetch and verify the latest published stable release. Review the patch ledger, drop changes already upstream, and replay the remaining commits in order. Use a new branch so the old release stays reproducible. A newer patch release such as v3.8.1 also needs an explicit new base and corresponding image version.
+The verified official tag resolves to `c1dd6b4f1947ff50843a155e12e70f1e7d15f0c7`. Future upgrades should review each patch and omit upstream replacements. Retain the old release tags and migration history.
 
 Only unpublished, unapplied custom migrations may be regenerated. For a migration already deployed, retain its history, reconcile upstream schema/journal conflicts, and design a forward upgrade path. Test both a clean database and a restored database containing the previous custom release before deployment.
 
@@ -168,3 +168,11 @@ The AGPL additional terms in `ADDITIONAL_TERMS.md` apply to this fork:
 ## Update checks and release notes
 
 The in-app update check and release notes read from `bookorbit/bookorbit` on GitHub (`server/src/modules/app-info/app-info.constants.ts` and `GITHUB_RELEASES_REPO`). That is intentional here: the instance reports when a new upstream stable release exists, and What's New shows upstream release notes up to the running base version.
+
+## Upstream 3.9.0 integration
+
+The official base is `c1dd6b4f1947ff50843a155e12e70f1e7d15f0c7`. The fork retains its published custom history with a merge rather than replaying already published commits. Release target: `v3.9.0-custom.1` and the same verified image under `latest`. The UK metadata companion remains independently released at `0.1.0`.
+
+Upstream migrations 0143 through 0161 are retained unchanged, including their snapshots and journal. The release gate checks a fresh database and an upgrade from the pinned custom.11 image with synthetic users, library, book, fractional series membership and preferences, followed by an idempotent restart. This does not test a production backup or replace deployment backups. Index creation can take longer on populated databases.
+
+Upstream now inventories the download-client validation route; remove only that duplicate from the fork inventory and preserve custom routes. Keep new AppInfo AI service dependencies when reconnecting custom version parsing. No new upstream workflow files or metadata HTTP-provider protocol changes were found. Keep upstream publishing and maintenance workflows disabled; the enabled fork workflows are Custom Image, Fork Checks and UK Metadata Provider.

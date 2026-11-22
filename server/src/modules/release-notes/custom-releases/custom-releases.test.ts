@@ -5,6 +5,7 @@ import { compareCustomReleaseVersions, getCustomReleaseNotes } from './custom-re
 
 describe('custom release notes', () => {
   it.each([
+    ['v3.9.0-custom.1', 'v3.8.0-custom.11', 1],
     ['v3.8.0-custom.2', 'v3.8.0-custom.1', 1],
     ['v3.8.0-custom.10', 'v3.8.0-custom.2', 1],
     ['v3.8.0-custom.1', 'v3.8.0', 1],
@@ -33,6 +34,10 @@ describe('custom release notes', () => {
 
   it.each(['v3.8.0', 'sha-build', 'Local build', 'v3.8.0-custom.0', 'v3.8.0-custom.01'])('does not attach custom notes to %s', (version) => {
     expect(getCustomReleaseNotes(version)).toEqual([]);
+  });
+
+  it('selects the new base revision after custom eleven', () => {
+    expect(getCustomReleaseNotes('v3.9.0-custom.1', 'v3.8.0-custom.11').map((release) => release.version)).toEqual(['v3.9.0-custom.1']);
   });
 
   it('bundles unique, useful notes with source links and no empty highlights', () => {

@@ -146,6 +146,7 @@ export async function smokeImage({
   baseUrl,
   expectedVersion,
   setupToken,
+  onAuthenticated,
   readyTimeoutMs = 120_000,
   pollIntervalMs = 2_000,
   requestTimeoutMs = 15_000,
@@ -197,6 +198,7 @@ export async function smokeImage({
   assert.match(asset.contentType, /(?:java|ecma)script/i, "Built client module must be served as JavaScript");
   assert.ok(asset.content.length > 0, "Built client module must not be empty");
 
+  if (onAuthenticated) await onAuthenticated({ token, userId: user.id });
   return {
     version: info.version,
     checks: ["health", "fresh-setup", "login", "session", "browse", "search", "version", "release-notes", "client-assets"],

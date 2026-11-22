@@ -2,6 +2,22 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.9.0-custom.1',
+    name: 'Custom revision 1: upstream 3.9.0',
+    date: '2026-11-22',
+    highlights: [
+      {
+        icon: 'BookOpen',
+        title: 'Updated to upstream 3.9.0',
+        body: 'Keep the custom Series Grid, series requests, sidebar preferences and metadata cover sources on the official 3.9.0 base. The optional UK metadata companion remains independently versioned at 0.1.0.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.9.0-custom.1',
+    changelogBody:
+      '### Custom changes\n\n- Integrate official upstream v3.9.0 while retaining the custom patch history and settings.\n- Keep the UK metadata companion on its independent 0.1.0 release.\n\nThe upstream upgrade applies database migrations 0143 through 0161. Back up the database and app data before deployment. Image rollback alone does not reverse migrations. This is a modified fork, not an official release.',
+  },
+  {
     version: 'v3.8.0-custom.11',
     name: 'Custom revision 11: external UK metadata providers',
     date: '2026-11-14',

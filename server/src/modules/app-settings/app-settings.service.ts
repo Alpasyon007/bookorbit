@@ -21,6 +21,7 @@ import {
 import { StatsCache } from '../../common/cache/stats-cache';
 import { storageConfig } from '../../config/config';
 import {
+  AI_MANAGED_SETTING_PREFIX,
   API_KEY_MANAGED_SETTING_KEYS,
   CUSTOM_PATCH_POLICY_KEY,
   APP_SETTING_KEYS,
@@ -94,10 +95,13 @@ export class AppSettingsService {
   async update(key: string, value: string) {
     if (key === CUSTOM_PATCH_POLICY_KEY) throw new BadRequestException('Setting is managed by the custom patch policy endpoint');
     if (BOOK_DOCK_MANAGED_SETTING_KEYS.includes(key)) {
-      throw new BadRequestException(`Setting '${key}' is managed by the Book Dock endpoints and cannot be written here`);
+      throw new BadRequestException(`Setting '${key}' is managed by the Library Dock endpoints and cannot be written here`);
     }
     if (API_KEY_MANAGED_SETTING_KEYS.includes(key)) {
       throw new BadRequestException(`Setting '${key}' is managed by the API key settings endpoint and cannot be written here`);
+    }
+    if (key.startsWith(AI_MANAGED_SETTING_PREFIX)) {
+      throw new BadRequestException(`Setting '${key}' is managed by the AI settings endpoints and cannot be written here`);
     }
     if (key === APP_SETTING_KEYS.MAX_UPLOAD_SIZE_MB) {
       const parsed = parseInt(value, 10);
@@ -140,6 +144,8 @@ export class AppSettingsService {
       APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_LIBRARY_ID,
       APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_FOLDER_ID,
       APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_METADATA_MODE,
+      APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_AUTO_JOIN,
+      APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_KEEP_ORIGINAL,
     ];
     const rows = await this.repo.findMany(keys);
     const settings = new Map(rows.map((row) => [row.key, row.value]));
@@ -154,6 +160,8 @@ export class AppSettingsService {
       autoFinalizeLibraryId: libraryId,
       autoFinalizeFolderId: folderId,
       autoFinalizeMetadataMode: parseAutoFinalizeMetadataMode(settings.get(APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_METADATA_MODE)),
+      unsortedAutoJoin: parseBooleanSetting(settings.get(APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_AUTO_JOIN), false),
+      unsortedKeepOriginal: parseBooleanSetting(settings.get(APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_KEEP_ORIGINAL), false),
     };
   }
 
@@ -165,6 +173,13 @@ export class AppSettingsService {
       { key: APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_LIBRARY_ID, value: settings.autoFinalizeLibraryId?.toString() ?? '' },
       { key: APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_FOLDER_ID, value: settings.autoFinalizeFolderId?.toString() ?? '' },
       { key: APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_METADATA_MODE, value: settings.autoFinalizeMetadataMode },
+      // Older clients do not send Unsorted's toggles; leaving them out keeps what is stored.
+      ...(settings.unsortedAutoJoin == null
+        ? []
+        : [{ key: APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_AUTO_JOIN, value: String(settings.unsortedAutoJoin) }]),
+      ...(settings.unsortedKeepOriginal == null
+        ? []
+        : [{ key: APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_KEEP_ORIGINAL, value: String(settings.unsortedKeepOriginal) }]),
     ]);
 
     return this.getBookDockSettings();
@@ -378,6 +393,8 @@ export class AppSettingsService {
       APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_LIBRARY_ID,
       APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_FOLDER_ID,
       APP_SETTING_KEYS.BOOK_DOCK_AUTO_FINALIZE_METADATA_MODE,
+      APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_AUTO_JOIN,
+      APP_SETTING_KEYS.BOOK_DOCK_UNSORTED_KEEP_ORIGINAL,
     ];
     const rows = await this.repo.findMany(keys);
     const map = new Map(rows.map((r) => [r.key, r.value]));

@@ -199,6 +199,11 @@ jobs:
             -e CLIENT_URL=http://127.0.0.1:3000 \
             "$IMAGE"
           node scripts/fork/smoke-image.mjs
+      - name: Verify previous custom release database upgrade
+        env:
+          IMAGE: bookorbit-checked:${{ github.sha }}
+          FORK_SMOKE_VERSION: ${{ needs.context.outputs.version }}
+        run: node scripts/fork/upgrade-image.mjs
       - name: Record tested image identity
         id: identity
         env:

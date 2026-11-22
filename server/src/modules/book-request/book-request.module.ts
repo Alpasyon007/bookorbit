@@ -1,12 +1,14 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MetadataFetchModule } from '../metadata-fetch/metadata-fetch.module';
 import { SeriesCatalogController } from './series-catalog.controller';
+import { SetupOverviewModule } from '../setup-overview/setup-overview.module';
 
 import { AppSettingsModule } from '../app-settings/app-settings.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
 import { BookDockModule } from '../book-dock/book-dock.module';
 import { CustomPatchSettingsModule } from '../custom-patches/custom-patch-settings.module';
+import { JobsModule } from '../jobs/jobs.module';
 import { LibraryModule } from '../library/library.module';
 import { NotificationModule } from '../notification/notification.module';
 import { UploadModule } from '../upload/upload.module';
@@ -22,7 +24,10 @@ import { BookRequestGateway } from './book-request.gateway';
 import { BookRequestNotifier } from './book-request-notifier.service';
 import { BookRequestRepository } from './book-request.repository';
 import { BookRequestService } from './book-request.service';
+import { BookRequestSetupFlow } from './book-request.setup-flow';
 import { RequestCredentialService } from './request-credential.service';
+import { RequestDownloadJobRepository } from './request-download-job.repository';
+import { RequestDownloadJobSource } from './request-download-job-source';
 import { DOWNLOAD_CLIENT_ADAPTERS } from './download-clients/download-client-adapter';
 import { DownloadClientConfigService } from './download-clients/download-client-config.service';
 import { DownloadClientReconciliationService } from './download-clients/download-client-reconciliation.service';
@@ -79,6 +84,7 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
 @Module({
   imports: [
     MetadataFetchModule,
+    SetupOverviewModule,
     LibraryModule,
     AppSettingsModule,
     AuditModule,
@@ -87,6 +93,7 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
     UploadModule,
     AuthModule,
     UserModule,
+    JobsModule,
     forwardRef(() => NotificationModule),
   ],
   controllers: [
@@ -100,6 +107,7 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
     IndexerManagerController,
   ],
   providers: [
+    BookRequestSetupFlow,
     BookRequestService,
     BookRequestRepository,
     BookRequestAttributionService,
@@ -108,6 +116,8 @@ import { RequestWatchdogService } from './fulfillment/request-watchdog.service';
     BookRequestGateway,
     BookRequestEventsService,
     RequestCredentialService,
+    RequestDownloadJobRepository,
+    RequestDownloadJobSource,
 
     DownloadClientRepository,
     DownloadClientConfigService,

@@ -201,6 +201,10 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       .insert(bookSeries)
       .values(['Universe', 'Saga', 'Trilogy', 'Arc', 'Other'].map((name) => ({ name, normalizedName: `${name.toLowerCase()}-${suffix}` })))
       .returning({ id: bookSeries.id, name: bookSeries.name });
+    const [genderedAuthor] = await ctx.db
+      .insert(authors)
+      .values({ name: `Gendered author ${suffix}`, gender: 'female' })
+      .returning({ id: authors.id });
     async function seed(title: string, path: number[], index: string | null, year: number) {
       const [book] = await ctx.db
         .insert(books)
@@ -234,6 +238,7 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       const parent = await seed('Charlie nested', [0], null, 2000);
       const other = await seed('Alpha nested', [4], '3', 1999);
       const standalone = await seed('Aardvark nested', [], null, 1998);
+      await ctx.db.insert(bookAuthors).values({ bookId: child, authorId: genderedAuthor!.id, displayOrder: 0 });
       const query = {
         groupBySeries: true,
         sort: [
@@ -255,6 +260,20 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       expect(filtered.items.map((card) => card.id)).toEqual([child]);
       expect(filtered.items[0]!.seriesGroupPath).toHaveLength(2);
       expect(filtered.items[0]!.seriesGroupHasChildren).toBe(false);
+      const newFilters = {
+        ...query,
+        filter: {
+          type: 'group',
+          join: 'AND',
+          rules: [
+            { type: 'rule', field: 'authorGender', operator: 'isEmpty' },
+            { type: 'rule', field: 'publishedYear', operator: 'gte', value: 2000 },
+          ],
+        },
+      };
+      const filteredPages = await Promise.all([0, 1].map((page) => list({ ...newFilters, pagination: { page, size: 1 } })));
+      expect(filteredPages.flatMap((page) => page.items).map((card) => card.id)).toEqual([deep, parent]);
+      expect(filteredPages.every((page) => page.total === 2)).toBe(true);
       const indexSort = await list({
         groupBySeries: true,
         sort: [
@@ -321,6 +340,7 @@ describe('Series Grid nested ordering (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, 
       expect(parentOnly.items.map((card) => [card.id, card.seriesGroupHasChildren])).toEqual([[parent, false]]);
     } finally {
       await ctx.db.delete(libraries).where(eq(libraries.id, library.libraryId));
+      await ctx.db.delete(authors).where(eq(authors.id, genderedAuthor!.id));
       await ctx.db.delete(bookSeries).where(
         inArray(
           bookSeries.id,

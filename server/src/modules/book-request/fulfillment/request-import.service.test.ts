@@ -66,6 +66,7 @@ async function makeHarness(options: { useHardlinks?: boolean; stagesLocally?: bo
   const removal = {
     cleanupStagedDirectDownload: vi.fn().mockResolvedValue(undefined),
     cleanupStagedClientDownload: vi.fn().mockResolvedValue(undefined),
+    removeCompletedDownload: vi.fn().mockResolvedValue(undefined),
   };
   // The real containment check over a stubbed mapping, so these tests exercise the boundary the
   // importer actually applies rather than a mock that always agrees with it.
@@ -219,6 +220,17 @@ describe('RequestImportService.importDownload', () => {
     expect(await readFile(join(harness.bookDockPath, 'request-7-dune.epub'), 'utf8')).toBe('book');
   });
 
+  it('offers a finished Usenet job to be removed from its client once the Book Dock holds the import', async () => {
+    const harness = await makeHarness();
+    const source = await makeFile(join(harness.bookDockPath, '..', 'downloads', 'Dune'), 'dune.epub');
+    const usenet = download(source, { source: 'nzb_file' });
+
+    await harness.service.importDownload(usenet);
+
+    expect(harness.removal.removeCompletedDownload).toHaveBeenCalledWith(usenet);
+    expect(await readFile(join(harness.bookDockPath, 'request-7-dune.epub'), 'utf8')).toBe('book');
+  });
+
   it('imports a staged cloud download from BookOrbit client staging', async () => {
     const harness = await makeHarness({ stagesLocally: true });
     const stagedPath = join(harness.appDataPath, 'client-downloads', 'torbox', 'key');
@@ -339,6 +351,7 @@ describe('RequestImportService.importDownload', () => {
         totalBytes: 4,
       },
       [3],
+      true,
     );
     expect(order.slice(0, 4)).toEqual(['request', 'download', 'progress', 'changed']);
   });
@@ -464,6 +477,8 @@ describe('RequestImportService.importDownload', () => {
 
     expect(harness.fulfillment.failDownload).not.toHaveBeenCalled();
     expect(harness.dockRepo.createUnit).not.toHaveBeenCalled();
+    // The books are still needed in the client's folder until somebody picks one.
+    expect(harness.removal.removeCompletedDownload).not.toHaveBeenCalled();
     expect(harness.fulfillment.holdForReview).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ id: 7 }),
@@ -789,6 +804,26 @@ describe('RequestImportService.importDownload', () => {
     const harness = await makeHarness();
     await expect(harness.service.importDownload(download('', { contentPath: null }))).resolves.toBe(false);
     expect(harness.fulfillment.failDownload).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('did not report'));
+  });
+
+  it('records an unreadable download with a code and the path it tried, keeping the same reason', async () => {
+    const harness = await makeHarness();
+    const missing = join(harness.downloadsPath, 'Frank Herbert - Dune ');
+
+    await expect(harness.service.importDownload(download(missing))).resolves.toBe(false);
+
+    expect(harness.fulfillment.failDownload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 11 }),
+      `The downloaded content is not readable at ${missing}`,
+      { code: 'DOWNLOAD_UNREADABLE', meta: { path: missing } },
+    );
+  });
+
+  it('leaves a failure it has no code for unclassified', async () => {
+    const harness = await makeHarness();
+    await harness.service.importDownload(download('', { contentPath: null }));
+    expect(harness.fulfillment.failDownload).toHaveBeenCalledTimes(1);
+    expect(harness.fulfillment.failDownload.mock.calls[0]).toHaveLength(2);
   });
 });
 

@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { ServerIdentityService } from '../server-identity/server-identity.service';
+import { StoryGuidesService } from '../story-guides/story-guides.service';
+import { VisionScanService } from '../vision-scan/vision-scan.service';
+import { ReadingHelpService } from '../reading-help/reading-help.service';
 import { AppInfoService } from './app-info.service';
 
 describe('AppInfoService fork versions', () => {
@@ -16,6 +19,10 @@ describe('AppInfoService fork versions', () => {
     const module = await Test.createTestingModule({
       providers: [
         AppInfoService,
+        ...[StoryGuidesService, VisionScanService, ReadingHelpService].map((provide) => ({
+          provide,
+          useValue: { appInfo: vi.fn().mockResolvedValue(undefined) },
+        })),
         { provide: ConfigService, useValue: { get: (key: string) => (key === 'app.version' ? version : undefined) } },
         {
           provide: AppSettingsService,
@@ -45,6 +52,8 @@ describe('AppInfoService fork versions', () => {
   });
 
   it.each([
+    ['v3.9.0-custom.1', 'v3.9.0', false],
+    ['v3.9.0-custom.1', 'v3.10.0', true],
     ['v3.8.0-custom.1', 'v3.8.0', false],
     ['v3.8.0-custom.99', 'v3.8.0', false],
     ['v3.8.0-custom.1', 'v3.8.1', true],

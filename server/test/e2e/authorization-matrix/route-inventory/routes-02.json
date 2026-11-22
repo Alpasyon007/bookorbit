@@ -197,9 +197,35 @@
   {
     "file": "server/src/modules/book/book.controller.ts",
     "className": "BookController",
+    "methodName": "bulkEmbedAudioCover",
+    "httpMethod": "POST",
+    "path": "/books/bulk-embed-audio-cover",
+    "permissions": ["Permission.LibraryEditMetadata"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "write"
+  },
+  {
+    "file": "server/src/modules/book/book.controller.ts",
+    "className": "BookController",
     "methodName": "reExtractCover",
     "httpMethod": "POST",
     "path": "/books/:id/re-extract-cover",
+    "permissions": ["Permission.LibraryEditMetadata"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "write"
+  },
+  {
+    "file": "server/src/modules/book/book.controller.ts",
+    "className": "BookController",
+    "methodName": "embedAudioCover",
+    "httpMethod": "POST",
+    "path": "/books/:id/embed-audio-cover",
     "permissions": ["Permission.LibraryEditMetadata"],
     "libraryAccess": [],
     "isPublic": false,
@@ -700,6 +726,19 @@
     "allowDefault": false,
     "useGuards": [],
     "apiKey": "write"
+  },
+  {
+    "file": "server/src/modules/book/book.controller.ts",
+    "className": "BookController",
+    "methodName": "getIsbnCandidates",
+    "httpMethod": "GET",
+    "path": "/books/:id/isbn-candidates",
+    "permissions": ["Permission.LibraryEditMetadata"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
   },
   {
     "file": "server/src/modules/book/book.controller.ts",
