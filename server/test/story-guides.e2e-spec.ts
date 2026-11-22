@@ -101,6 +101,10 @@ describe('Story guides (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
     await triggerAndWaitForLibraryScan(ctx, library.libraryId);
     book = await locateBookByAbsolutePath(ctx, guidePath);
     shortBook = await locateBookByAbsolutePath(ctx, shortPath);
+    await ctx.db
+      .insert(schema.bookMetadata)
+      .values({ bookId: book.bookId, title: 'A Study in Scarlet' })
+      .onConflictDoUpdate({ target: schema.bookMetadata.bookId, set: { title: 'A Study in Scarlet' } });
 
     superuser = await createUserAndLogin(ctx, { isSuperuser: true });
     settingsAdmin = await createUserAndLogin(ctx, { permissions: [Permission.ManageAppSettings, Permission.LibraryGenerateStoryGuide] });
@@ -206,9 +210,19 @@ describe('Story guides (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
   });
 
   it('queues a build, refuses a second while it is unfinished, and shows readers only its state', async () => {
-    const queued = await call(builder, 'POST', '/books/bulk/story-guides', { query: { libraryId, q: 'scarlet' } });
+    const queued = await call(builder, 'POST', '/books/bulk/story-guides', {
+      query: {
+        libraryId,
+        filter: { type: 'group', join: 'AND', rules: [{ type: 'rule', field: 'title', operator: 'eq', value: 'A Study in Scarlet' }] },
+      },
+    });
     expect(queued.statusCode).toBe(200);
-    expect(queued.body).toMatch(/"queued":1/);
+    expect(queued.headers['x-bulk-run-id']).toBeDefined();
+    const events = queued.body
+      .split('\n')
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => JSON.parse(line.slice(6)) as object);
+    expect(events).toContainEqual({ done: true, queued: 1, skipped: 0, failed: 0 });
     const body = await status(builder);
     expect(body.job).toMatchObject({ kind: 'build' });
     expect(['queued', 'running', 'paused']).toContain(body.job?.state);
