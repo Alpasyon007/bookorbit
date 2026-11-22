@@ -492,7 +492,13 @@ describe('Story guides (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
     });
     const rates = ctx.app.get(AiStepRates, { strict: false });
     for (const seconds of [900, 10, 20, 30, 40, 50]) await rates.learn([timing('names', 'fast-e2e', seconds * 10_000)]);
-    await rates.learn([timing('ties', 'fast-e2e', 100_000), timing('lines', 'fast-e2e', 200_000), timing('review', 'careful-e2e', 300_000)]);
+    await rates.learn([
+      timing('ties', 'fast-e2e', 100_000),
+      timing('lines', 'fast-e2e', 200_000),
+      timing('profiles', 'fast-e2e', 200_000),
+      timing('summaries', 'fast-e2e', 200_000),
+      timing('review', 'careful-e2e', 300_000),
+    ]);
     const kept = await ctx.db
       .select()
       .from(schema.aiStepTimings)
@@ -514,6 +520,8 @@ describe('Story guides (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
       { step: 'names', secondsPerCall: 30, builds: AI_STEP_TIMINGS_KEPT },
       { step: 'ties', secondsPerCall: 10, builds: 1 },
       { step: 'lines', secondsPerCall: 20, builds: 1 },
+      { step: 'profiles', secondsPerCall: 20, builds: 1 },
+      { step: 'summaries', secondsPerCall: 20, builds: 1 },
     ]);
 
     const reset = { connectionId: connection!.id, model: 'careful-e2e' };
