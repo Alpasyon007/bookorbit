@@ -145,6 +145,28 @@ export class AiJobRepository {
     return this.announce(row ?? null, 'state');
   }
 
+  async createIfMissing(values: Omit<NewAiJobRow, 'status'>): Promise<AiJobRow | 'artifact-exists' | null> {
+    const result = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(aiJobs)
+        .values({ ...values, status: 'queued' })
+        .onConflictDoNothing()
+        .returning();
+      if (!row) return null;
+      const [artifact] = await tx
+        .select({ id: aiArtifacts.id })
+        .from(aiArtifacts)
+        .where(and(eq(aiArtifacts.feature, values.feature), eq(aiArtifacts.subjectKey, values.subjectKey)))
+        .limit(1);
+      if (artifact) {
+        await tx.delete(aiJobs).where(eq(aiJobs.id, row.id));
+        return 'artifact-exists' as const;
+      }
+      return row;
+    });
+    return result === 'artifact-exists' ? result : this.announce(result, 'state');
+  }
+
   async findByIds(ids: readonly string[]): Promise<AiJobRow[]> {
     if (ids.length === 0) return [];
     return await this.db

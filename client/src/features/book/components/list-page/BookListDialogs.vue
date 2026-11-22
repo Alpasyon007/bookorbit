@@ -36,6 +36,7 @@ function handleRemoveFromCollection() {
   />
 
   <SelectionActionBar
+    story-guides-enabled
     :metadata-editable="page.canEditSelectionMetadata"
     :visible="page.selectionMode"
     :count="page.selectedCount"
@@ -54,6 +55,7 @@ function handleRemoveFromCollection() {
     @refresh-metadata="page.handleBulkRefreshMetadata"
     @re-extract-cover="page.handleBulkReExtractCover"
     @embed-audio-cover="page.handleBulkEmbedAudioCover"
+    @build-story-guides="page.handleBulkBuildStoryGuides"
     @set-status="page.handleBulkSetStatus"
     @set-rating="page.handleBulkSetRating"
     @set-field="page.handleBulkSetField"

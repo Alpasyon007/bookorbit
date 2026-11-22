@@ -145,6 +145,17 @@ describe('Story guides (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
     expect((await call(builder, 'POST', `/books/${book.bookId}/story-guide`, { kind: 'refresh' })).statusCode).toBe(400);
   });
 
+  it('authorizes and validates the bulk guide selection', async () => {
+    const url = '/books/bulk/story-guides';
+    expect((await call(reader, 'POST', url, { bookIds: [shortBook.bookId] })).statusCode).toBe(403);
+    expect((await call(builder, 'POST', url, { bookIds: [shortBook.bookId], extra: true })).statusCode).toBe(400);
+    expect((await call(outsider, 'POST', url, { bookIds: [shortBook.bookId] })).statusCode).toBe(403);
+    const result = await call(builder, 'POST', url, { bookIds: [shortBook.bookId] });
+    expect(result.statusCode).toBe(200);
+    expect(result.headers['x-bulk-run-id']).toBeDefined();
+    expect(result.body).toMatch(/"skipped":1/);
+  });
+
   it('reports the feature off to managers, and nothing to readers', async () => {
     const managed = await status(builder);
     expect(managed.fileId).toBe(book.bookFileId);
@@ -195,9 +206,10 @@ describe('Story guides (e2e)', { timeout: SCENARIO_TIMEOUT_MS }, () => {
   });
 
   it('queues a build, refuses a second while it is unfinished, and shows readers only its state', async () => {
-    const queued = await call(builder, 'POST', `/books/${book.bookId}/story-guide`, { kind: 'build' });
-    expect(queued.statusCode).toBe(202);
-    const body = queued.json<StoryGuideStatus>();
+    const queued = await call(builder, 'POST', '/books/bulk/story-guides', { query: { libraryId, q: 'scarlet' } });
+    expect(queued.statusCode).toBe(200);
+    expect(queued.body).toMatch(/"queued":1/);
+    const body = await status(builder);
     expect(body.job).toMatchObject({ kind: 'build' });
     expect(['queued', 'running', 'paused']).toContain(body.job?.state);
 

@@ -40,6 +40,10 @@ describe('custom release notes', () => {
     expect(getCustomReleaseNotes('v3.9.0-custom.1', 'v3.8.0-custom.11').map((release) => release.version)).toEqual(['v3.9.0-custom.1']);
   });
 
+  it('shows only the bulk Story Guide revision after custom one', () => {
+    expect(getCustomReleaseNotes('v3.9.0-custom.2', 'v3.9.0-custom.1').map((release) => release.version)).toEqual(['v3.9.0-custom.2']);
+  });
+
   it('bundles unique, useful notes with source links and no empty highlights', () => {
     expect(new Set(CUSTOM_RELEASE_NOTES.map((release) => release.version)).size).toBe(CUSTOM_RELEASE_NOTES.length);
     for (const release of CUSTOM_RELEASE_NOTES) {

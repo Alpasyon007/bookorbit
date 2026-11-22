@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, useSlots, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, useSlots, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   BookOpen,
@@ -41,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useAppInfo } from '@/features/settings/composables/useAppInfo'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import BulkReadingStateDialog from '@/features/book/components/BulkReadingStateDialog.vue'
 import type { BulkReadingStatePatch } from '@/features/book/composables/useBookStatus'
@@ -55,7 +56,7 @@ import { bulkRunLabel } from '@/features/jobs/lib/bulk-runs'
 import { formatNumber } from '@/i18n/formatters'
 import type { MergeSelectionState } from '@/features/book/lib/book-merge'
 import type { LinkSelectionState } from '@/features/book/lib/book-link'
-import { BOOK_LINK_MAX_MEMBERS, BOOK_MERGE_MAX_BOOKS } from '@bookorbit/types'
+import { BOOK_LINK_MAX_MEMBERS, BOOK_MERGE_MAX_BOOKS, Permission } from '@bookorbit/types'
 
 export type ExportScope = 'primary' | 'all' | 'audio'
 
@@ -76,6 +77,7 @@ const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visibl
 
 const props = withDefaults(
   defineProps<{
+    storyGuidesEnabled?: boolean
     count: number
     visible: boolean
     inCollection?: boolean
@@ -104,6 +106,7 @@ const emit = defineEmits<{
   'refresh-metadata': [options: IgnoreCacheOptions]
   're-extract-cover': []
   'embed-audio-cover': []
+  'build-story-guides': []
   'set-status': [patch: BulkReadingStatePatch]
   'set-rating': [rating: number | null]
   'set-field': [field: BulkEditableField, value: BulkEditableValue]
@@ -120,6 +123,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { ensureAppInfo, supportsFeature, storyGuides } = useAppInfo()
+onMounted(ensureAppInfo)
 const { hasPermission, isDemoRestrictedAccount } = usePermissions()
 const { search: searchPublisher } = usePublisherSearch()
 const { search: searchSeriesName } = useSeriesNameSearch()
@@ -134,6 +139,8 @@ const refreshIgnoreCache = ref(false)
 const refreshConfirmButton = ref<HTMLButtonElement | null>(null)
 const embedConfirmOpen = ref(false)
 const embedConfirmButton = ref<HTMLButtonElement | null>(null)
+const storyGuideConfirmOpen = ref(false)
+const storyGuideConfirmButton = ref<HTMLButtonElement | null>(null)
 const readingStateOpen = ref(false)
 const bulkField = ref<BulkEditableField>('publisher')
 const fieldValue = ref('')
@@ -144,6 +151,14 @@ const canDownload = computed(() => hasPermission('library_download') && canBulkA
 const canSetRating = computed(() => hasPermission('library_edit_metadata') && canBulkActions.value)
 const canEditMetadata = computed(() => hasPermission('library_edit_metadata') && canBulkActions.value && props.metadataEditable !== false)
 const canMoveToLibrary = computed(() => hasPermission('library_edit_metadata') && canBulkActions.value && props.metadataEditable !== false)
+const canBuildStoryGuides = computed(
+  () =>
+    props.storyGuidesEnabled === true &&
+    canBulkActions.value &&
+    hasPermission(Permission.LibraryGenerateStoryGuide) &&
+    supportsFeature('story-guides') &&
+    storyGuides.value?.building === true,
+)
 const canMerge = computed(() => props.merge !== null && canBulkActions.value)
 const canLink = computed(() => props.link !== null && canBulkActions.value)
 const mergeDisabledText = computed(() => {
@@ -174,7 +189,9 @@ const linkDisabledText = computed(() => {
       return null
   }
 })
-const canShowMoreMenu = computed(() => canDownload.value || canEditMetadata.value || canMoveToLibrary.value || canMerge.value || canLink.value)
+const canShowMoreMenu = computed(
+  () => canBuildStoryGuides.value || canDownload.value || canEditMetadata.value || canMoveToLibrary.value || canMerge.value || canLink.value,
+)
 const canShare = computed(() => hasPermission('email_send') || canDownload.value)
 const numericFieldSelected = computed(() => bulkField.value === 'publishedYear')
 const arrayFieldSelected = computed(() => (BULK_EDITABLE_ARRAY_FIELDS as readonly string[]).includes(bulkField.value))
@@ -306,6 +323,22 @@ function confirmEmbedAudioCover() {
   embedConfirmOpen.value = false
 }
 
+async function openStoryGuideConfirmation() {
+  if (props.count === 0 || !canBuildStoryGuides.value) return
+  storyGuideConfirmOpen.value = true
+  await nextTick()
+  storyGuideConfirmButton.value?.focus()
+}
+
+function confirmBuildStoryGuides() {
+  if (props.count > 0 && canBuildStoryGuides.value) emit('build-story-guides')
+  storyGuideConfirmOpen.value = false
+}
+
+function cancelBuildStoryGuides() {
+  storyGuideConfirmOpen.value = false
+}
+
 function cancelEmbedAudioCover() {
   embedConfirmOpen.value = false
 }
@@ -371,6 +404,7 @@ watch(
       ratingMenuOpen.value = false
       refreshConfirmOpen.value = false
       embedConfirmOpen.value = false
+      storyGuideConfirmOpen.value = false
       readingStateOpen.value = false
       deleteInput.value = ''
       resetFieldEditor()
@@ -438,7 +472,17 @@ watch(
             <slot name="content" :count="count" />
           </template>
 
-          <template v-else-if="!confirmingDelete && !exportMenuOpen && !ratingMenuOpen && !fieldMenuOpen && !refreshConfirmOpen && !embedConfirmOpen">
+          <template
+            v-else-if="
+              !confirmingDelete &&
+              !exportMenuOpen &&
+              !ratingMenuOpen &&
+              !fieldMenuOpen &&
+              !refreshConfirmOpen &&
+              !embedConfirmOpen &&
+              !storyGuideConfirmOpen
+            "
+          >
             <span class="px-2.5 py-0.5 text-sm font-semibold tabular-nums whitespace-nowrap rounded-full bg-primary/10 text-primary">{{
               count
             }}</span>
@@ -582,6 +626,10 @@ watch(
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="top" align="center" class="w-56">
+                      <DropdownMenuItem v-if="canBuildStoryGuides" data-testid="action-build-story-guides" @click="openStoryGuideConfirmation">
+                        <BookOpen :size="14" />
+                        <span>{{ t('book.bulkStoryGuides.action') }}</span>
+                      </DropdownMenuItem>
                       <template v-if="canEditMetadata">
                         <DropdownMenuItem data-testid="action-bulk-set-field" @click="openFieldEditor">
                           <SquarePen :size="14" />
@@ -770,6 +818,24 @@ watch(
               {{ t('components.selectionActionBar.embedAudioCoverConfirmAction') }}
             </button>
             <button type="button" :class="BTN_TEXT_CANCEL" data-testid="bulk-embed-cancel" @click="cancelEmbedAudioCover">
+              {{ t('common.cancel') }}
+            </button>
+          </template>
+
+          <template v-else-if="storyGuideConfirmOpen">
+            <span class="px-3 min-w-48 max-w-80 text-sm text-foreground" data-testid="bulk-story-guides-confirm">
+              {{ t('book.bulkStoryGuides.confirm', { count }) }}
+            </span>
+            <button
+              ref="storyGuideConfirmButton"
+              type="button"
+              :class="[BTN_TEXT_PRIMARY, 'shrink-0']"
+              data-testid="bulk-story-guides-confirm-action"
+              @click="confirmBuildStoryGuides"
+            >
+              {{ t('book.bulkStoryGuides.action') }}
+            </button>
+            <button type="button" :class="[BTN_TEXT_CANCEL, 'shrink-0']" data-testid="bulk-story-guides-cancel" @click="cancelBuildStoryGuides">
               {{ t('common.cancel') }}
             </button>
           </template>

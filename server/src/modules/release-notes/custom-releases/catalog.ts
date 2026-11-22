@@ -2,6 +2,27 @@ import type { ReleaseNote } from '@bookorbit/types';
 
 export const CUSTOM_RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: 'v3.9.0-custom.2',
+    name: 'Custom revision 2: bulk Story Guide builds',
+    date: '2026-11-22',
+    highlights: [
+      {
+        icon: 'BookOpen',
+        title: 'Build Story Guides from your library',
+        body: 'Select books in the library, then choose Build Story Guides from More actions. You can also use Select all for the current results. Confirm the selection to queue background builds and follow them in Jobs. Existing guides are skipped, and normal AI cost limits apply.',
+        media: [],
+      },
+    ],
+    changelogUrl: 'https://github.com/Alpasyon007/bookorbit/tree/v3.9.0-custom.2',
+    changelogBody: [
+      '### Custom changes',
+      '- Add Build Story Guides to library bulk actions for selected books or all current matching results.',
+      '- Queue background Story Guide builds and report queued, skipped and failed counts. Follow the builds in Jobs.',
+      '- Skip existing guides, active builds and books without usable text. Builds use the existing AI permissions and cost limits.',
+      'Based on upstream v3.9.0. Includes database migration 0162 for the new bulk action.',
+    ].join('\n\n'),
+  },
+  {
     version: 'v3.9.0-custom.1',
     name: 'Custom revision 1: upstream 3.9.0',
     date: '2026-11-22',

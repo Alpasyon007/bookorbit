@@ -1,5 +1,5 @@
 {
-  "totalRoutes": 766,
+  "totalRoutes": 767,
   "byPermission": {
     "(none)": 287,
     "Permission.ManageMetadataConfig": 50,
@@ -31,7 +31,7 @@
     "Permission.LibraryGenerateReadAloud": 15,
     "Permission.LibraryMergeBooks": 18,
     "Permission.ApiKeys": 2,
-    "Permission.LibraryGenerateStoryGuide": 11
+    "Permission.LibraryGenerateStoryGuide": 12
   },
   "byLibraryAccess": {
     "'viewer'": 6,

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AI_FEATURE_DEFINITIONS,
   AI_JOB_KINDS,
@@ -112,6 +112,25 @@ export class StoryGuidesService {
     const status = await this.statusFor(file, user, text);
     if (result.kind === 'created') return { kind: 'queued', status };
     return { kind: result.kind, status };
+  }
+
+  async buildMissing(bookId: number, user: RequestUser): Promise<'queued' | 'skipped'> {
+    try {
+      await this.books.verifyBookAccess(bookId, user);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) return 'skipped';
+      throw error;
+    }
+    const file = await this.pickFile(bookId, undefined);
+    if (!file) return 'skipped';
+    const result = await this.jobs.request({
+      feature: STORY_GUIDE_FEATURE,
+      kind: 'build',
+      subjectRef: { bookId, fileId: file.id },
+      actor: user,
+      onlyIfMissing: true,
+    });
+    return result.kind === 'created' ? 'queued' : 'skipped';
   }
 
   async retry(bookId: number, fileId: number | undefined, user: RequestUser): Promise<StoryGuideStatus> {

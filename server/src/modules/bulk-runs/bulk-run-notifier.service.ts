@@ -18,6 +18,7 @@ const KIND_TITLES: Partial<Record<string, string>> & Record<BulkRunKind, string>
   'book-embed-audio-cover': 'Embed audiobook covers',
   'author-refresh-metadata': 'Refresh author metadata',
   'book-move': 'Move books',
+  'book-build-story-guides': 'Build story guides',
 };
 
 const REASONS: Partial<Record<string, string>> = {

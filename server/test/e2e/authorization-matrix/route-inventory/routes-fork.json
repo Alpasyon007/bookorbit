@@ -102,5 +102,18 @@
     "allowDefault": false,
     "useGuards": [],
     "apiKey": "write"
+  },
+  {
+    "file": "server/src/modules/story-guides/story-guides-bulk.controller.ts",
+    "className": "StoryGuidesBulkController",
+    "methodName": "build",
+    "httpMethod": "POST",
+    "path": "/books/bulk/story-guides",
+    "permissions": ["Permission.LibraryGenerateStoryGuide"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "write"
   }
 ]

@@ -23,6 +23,7 @@ export interface AiJobRequest {
   kind: AiJobKind;
   subjectRef: AiJobSubjectRef;
   actor: RequestUser;
+  onlyIfMissing?: boolean;
 }
 
 export type AiJobRequestResult =
@@ -105,6 +106,7 @@ export class AiJobsService {
     if (unfinished) return { kind: 'conflict', job: unfinished };
 
     const artifact = await this.artifacts.findInfo(feature.id, subject.key);
+    if (input.onlyIfMissing && artifact) return { kind: 'refused', refusal: { reason: 'artifact-exists' } };
     const models = await this.currentModels(feature);
     if (input.kind === 'rebuild' && !artifact) return { kind: 'refused', refusal: { reason: 'no-artifact' } };
     if (
@@ -120,7 +122,7 @@ export class AiJobsService {
       models,
       artifact: artifact ? { pipeline: artifact.pipeline, generation: artifact.generation, models: artifact.models } : null,
     });
-    const job = await this.jobs.create({
+    const values = {
       feature: feature.id,
       kind: input.kind,
       subjectKey: subject.key,
@@ -129,7 +131,9 @@ export class AiJobsService {
       generation,
       requestedBy: input.actor.id,
       estimate,
-    });
+    };
+    const job = input.onlyIfMissing ? await this.jobs.createIfMissing(values) : await this.jobs.create(values);
+    if (job === 'artifact-exists') return { kind: 'refused', refusal: { reason: 'artifact-exists' } };
     if (!job) {
       const winner = await this.jobs.findUnfinished(feature.id, subject.key);
       if (winner) return { kind: 'conflict', job: winner };

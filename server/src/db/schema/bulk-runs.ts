@@ -55,7 +55,7 @@ export const bulkRuns = pgTable(
     index('bulk_runs_requested_by_finished_idx').on(t.requestedBy, sql`${t.finishedAt} desc`, sql`${t.id} desc`),
     check(
       'bulk_runs_kind_chk',
-      sql`${t.kind} in ('book-refresh-metadata', 'book-re-extract-cover', 'book-embed-audio-cover', 'author-refresh-metadata', 'book-move')`,
+      sql`${t.kind} in ('book-refresh-metadata', 'book-re-extract-cover', 'book-embed-audio-cover', 'author-refresh-metadata', 'book-move', 'book-build-story-guides')`,
     ),
     check('bulk_runs_status_chk', sql`${t.status} in ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')`),
     check('bulk_runs_credential_kind_chk', sql`${t.credentialKind} in ('session', 'api_key')`),

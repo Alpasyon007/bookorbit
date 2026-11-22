@@ -5067,7 +5067,10 @@
         "noPermission": "You do not have permission to manage these server controls.",
         "availability": "Feature availability",
         "fields": {
-          "seriesGridEnabled": { "label": "Make Series Grid available", "hint": "Users can choose Series Grid in library views." },
+          "seriesGridEnabled": {
+            "label": "Make Series Grid available",
+            "hint": "Users can choose Series Grid in library views."
+          },
           "sidebarCustomizationEnabled": {
             "label": "Allow sidebar link customization",
             "hint": "Users can choose which promotional and app links appear in their sidebar. Turning this off restores the app's original links for everyone."
@@ -5087,7 +5090,10 @@
         "enabled": "Show Series Grid",
         "enabledHint": "Offer Series Grid as a library view.",
         "hierarchy": "Membership priority",
-        "hierarchyOptions": { "forward": "First membership first", "reverse": "Last membership first" },
+        "hierarchyOptions": {
+          "forward": "First membership first",
+          "reverse": "Last membership first"
+        },
         "hierarchyExamples": {
           "forward": "For saved memberships Universe / Saga / Trilogy, the grid shows Universe → Saga → Trilogy. The grid uses the innermost membership for Series # sorting.",
           "reverse": "For saved memberships Universe / Saga / Trilogy, the grid shows Trilogy → Saga → Universe. The grid uses the innermost membership for Series # sorting."
@@ -5106,7 +5112,10 @@
         "directBooks": "Books directly in a parent series",
         "directBooksHint": "Place their Standalone group before or after the child series.",
         "standalonePosition": "Books with no series",
-        "positionOptions": { "first": "First", "last": "Last" },
+        "positionOptions": {
+          "first": "First",
+          "last": "Last"
+        },
         "standaloneLabel": "Standalone heading",
         "standaloneLabelHint": "Applies to books with no series and books directly in a parent series. Leave blank to use the label in your app language.",
         "headingIndent": "Child heading indentation",
@@ -5124,9 +5133,15 @@
         "enabled": "Show Series Requests",
         "enabledHint": "Browse the Hardcover series catalog from Book Requests when Hardcover is configured.",
         "format": "Default series request format",
-        "formatOptions": { "ebook": "E-book", "audiobook": "Audiobook" },
+        "formatOptions": {
+          "ebook": "E-book",
+          "audiobook": "Audiobook"
+        },
         "selection": "Initial book selection",
-        "selectionOptions": { "eligible": "Select all requestable books", "none": "Start with no books selected" },
+        "selectionOptions": {
+          "eligible": "Select all requestable books",
+          "none": "Start with no books selected"
+        },
         "requestAll": "Show Request all released books",
         "requestAllHint": "Offer a separate action that includes requestable books across all pages regardless of selection.",
         "languageLink": "Open Book Requests to set request language",
@@ -6468,6 +6483,7 @@
       "BookBulkMetadataRefresh": "Refresh book metadata",
       "BookBulkDelete": "Delete books",
       "BookBulkCoverReextract": "Re-extract book covers",
+      "BookBulkBuildStoryGuides": "Build Story Guides for selected books",
       "BookBulkEmbedAudioCover": "Embed audiobook covers in read-along EPUBs",
       "BookBulkSetStatus": "Set book status",
       "BookBulkSetRating": "Set book rating",
@@ -10477,6 +10493,13 @@
       "failed": "Failed to refresh metadata",
       "completed": "{processed, plural, one {Refreshed metadata for # book} other {Refreshed metadata for # books}}",
       "completedWithFailures": "{processed, plural, one {Refreshed # book, {failed} failed} other {Refreshed # books, {failed} failed}}"
+    },
+    "bulkStoryGuides": {
+      "action": "Build Story Guides",
+      "confirm": "Build Story Guides for {count} selected books? Books with existing guides are skipped. Your configured AI provider processes book text. Existing AI cost limits apply.",
+      "inProgress": "Queueing Story Guides",
+      "failed": "Failed to queue Story Guides",
+      "completed": "Story Guides: {queued} queued, {skipped} skipped, {failed} failed. Follow builds in Jobs."
     }
   },
   "bookMetadataFetch": {

@@ -99,7 +99,11 @@ export class BulkRunJobSource implements JobSource<BulkRunJobRow>, OnModuleInit 
 
   access(user: RequestUser): JobAccess {
     return {
-      own: user.active && (user.isSuperuser || user.permissions.includes(Permission.LibraryEditMetadata)),
+      own:
+        user.active &&
+        (user.isSuperuser ||
+          user.permissions.includes(Permission.LibraryEditMetadata) ||
+          user.permissions.includes(Permission.LibraryGenerateStoryGuide)),
       all: user.active && (user.isSuperuser || user.permissions.includes(Permission.ManageAppSettings)),
     };
   }

@@ -811,3 +811,43 @@ describe('useBookBulkActions', () => {
     expect(mocks.bumpVersion).toHaveBeenCalledWith(22)
   })
 })
+
+describe('bulk Story Guide submission', () => {
+  beforeEach(() => {
+    mocks.api.mockReset()
+    mocks.toastSuccess.mockReset()
+    mocks.toastWarning.mockReset()
+    i18n.global.locale.value = 'en'
+  })
+  it('posts explicit IDs once and reports the queued/skipped summary', async () => {
+    mocks.api.mockResolvedValue(
+      makeSseStream([
+        'data: {"started":true,"total":2}',
+        'data: {"bookId":3,"status":"queued"}',
+        'data: {"bookId":4,"status":"skipped"}',
+        'data: {"done":true,"queued":1,"skipped":1,"failed":0}',
+      ]),
+    )
+    const actions = useBookBulkActions(ref(new Set([3, 4])), vi.fn())
+    await actions.handleBulkBuildStoryGuides()
+    expect(mocks.api).toHaveBeenCalledTimes(1)
+    expect(mocks.api).toHaveBeenCalledWith('/api/v1/books/bulk/story-guides', expect.objectContaining({ body: JSON.stringify({ bookIds: [3, 4] }) }))
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Story Guides: 1 queued, 1 skipped, 0 failed. Follow builds in Jobs.')
+    expect(actions.inFlight.value).toBeNull()
+  })
+  it('posts a query without enumerating the library and reports failures', async () => {
+    mocks.api.mockResolvedValue(makeSseStream(['data: {"done":true,"queued":2,"skipped":0,"failed":1}']))
+    await useBookBulkActions(
+      ref(new Set<number>()),
+      vi.fn(),
+      undefined,
+      undefined,
+      ref({ libraryId: 7, q: 'test', filter: { type: 'group' as const, join: 'AND' as const, rules: [] }, total: 10000 }),
+    ).handleBulkBuildStoryGuides()
+    expect(mocks.api).toHaveBeenCalledWith(
+      '/api/v1/books/bulk/story-guides',
+      expect.objectContaining({ body: JSON.stringify({ query: { libraryId: 7, filter: { type: 'group', join: 'AND', rules: [] }, q: 'test' } }) }),
+    )
+    expect(mocks.toastWarning).toHaveBeenCalledWith('Story Guides: 2 queued, 0 skipped, 1 failed. Follow builds in Jobs.')
+  })
+})

@@ -1,0 +1,2 @@
+ALTER TABLE "bulk_runs" DROP CONSTRAINT "bulk_runs_kind_chk";--> statement-breakpoint
+ALTER TABLE "bulk_runs" ADD CONSTRAINT "bulk_runs_kind_chk" CHECK ("bulk_runs"."kind" in ('book-refresh-metadata', 'book-re-extract-cover', 'book-embed-audio-cover', 'author-refresh-metadata', 'book-move', 'book-build-story-guides'));

@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import {
   BOOK_METADATA_LOCK_FIELDS,
   type AudioCoverEmbedProgressEvent,
+  type BulkStoryGuideProgressEvent,
   type BookSelectionPayload,
   type BookSelectionQuery,
   type BookCard,
@@ -299,6 +300,46 @@ export function useBookBulkActions(
     else toast.success(t('book.audioCoverEmbed.bulkCompleted', values))
   }
 
+  async function handleBulkBuildStoryGuides() {
+    if (!hasSelection() || inFlight.value) return
+    const run = tracker.begin('book-build-story-guides', querySelection?.value?.total ?? selectedIds.value.size)
+    let queued = 0
+    let skipped = 0
+    let failed = 0
+    let outcome: BulkRunFollowResult | null = null
+    try {
+      const res = await api('/api/v1/books/bulk/story-guides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(getSelectionPayload()),
+        signal: run.signal,
+      })
+      if (!res.ok || !res.body) {
+        toast.error(bulkRunRefusalText(res, t('book.bulkStoryGuides.failed')))
+        return
+      }
+      outcome = await run.follow<BulkStoryGuideProgressEvent>(res, (event) => {
+        if ('done' in event) {
+          queued = event.queued ?? 0
+          skipped = event.skipped ?? 0
+          failed = event.failed ?? 0
+          return true
+        }
+        if ('started' in event) run.started(event.total)
+        else run.advance()
+        return false
+      })
+    } catch {
+      if (!run.signal.aborted) toast.error(t('book.bulkStoryGuides.failed'))
+    } finally {
+      run.end()
+    }
+    if (outcome?.end !== 'done') return
+    if (outcome.cancelled) reportCancelled(outcome)
+    else if (failed > 0) toast.warning(t('book.bulkStoryGuides.completed', { queued, skipped, failed }))
+    else toast.success(t('book.bulkStoryGuides.completed', { queued, skipped, failed }))
+  }
+
   /** A run this page cancelled ends with how far it got, not the kind's usual summary. */
   function reportCancelled(outcome: BulkRunFollowResult) {
     toast.info(t('jobsArea.bulk.cancelled', { processed: formatNumber(outcome.processed), total: formatNumber(outcome.total) }))
@@ -464,6 +505,7 @@ export function useBookBulkActions(
     handleBulkRefreshMetadata,
     handleBulkReExtractCover,
     handleBulkEmbedAudioCover,
+    handleBulkBuildStoryGuides,
     handleDownloadFiles,
     handleBulkSetStatus,
     handleBulkSetRating,

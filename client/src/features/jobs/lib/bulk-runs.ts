@@ -36,6 +36,7 @@ export async function cancelBulkRun(runId: string): Promise<void> {
 
 /** The name a run in progress goes by; two kinds reuse the wording their screens already had. */
 const LABEL_KEYS: Record<BulkRunKind, string> = {
+  'book-build-story-guides': 'book.bulkStoryGuides.inProgress',
   'book-refresh-metadata': 'jobsArea.bulk.labels.book-refresh-metadata',
   'book-re-extract-cover': 'book.coverRegeneration.bulkInProgress',
   'book-embed-audio-cover': 'book.audioCoverEmbed.bulkInProgress',

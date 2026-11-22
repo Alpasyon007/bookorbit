@@ -99,6 +99,8 @@ jobs:
             authorization-matrix,
             book-requests,
             metadata-http-providers,
+            bulk-runs,
+            story-guides,
           ]
     env:
       E2E_DATABASE_URL: postgres://bookorbit:bookorbit@localhost:5432/bookorbit_e2e

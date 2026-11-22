@@ -9,6 +9,7 @@ export const BULK_RUN_KINDS = [
   "book-embed-audio-cover",
   "author-refresh-metadata",
   "book-move",
+  "book-build-story-guides",
 ] as const;
 export type BulkRunKind = (typeof BULK_RUN_KINDS)[number];
 
@@ -21,3 +22,8 @@ export const BULK_RUN_ID_HEADER = "X-Bulk-Run-Id";
 
 /** Queued or running runs one account may hold; the next one is refused with 429. */
 export const BULK_RUN_MAX_UNFINISHED = 10;
+
+export type BulkStoryGuideProgressEvent =
+  | { started: true; total: number }
+  | { bookId: number; status: "queued" | "skipped" }
+  | { done: true; queued: number; skipped: number; failed: number };

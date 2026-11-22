@@ -8,6 +8,19 @@ import type { MergeSelectionState } from '@/features/book/lib/book-merge'
 import type { LinkSelectionState } from '@/features/book/lib/book-link'
 import type { BulkRunInFlight } from '@/features/jobs/composables/useBulkRunTracker'
 
+const appInfoState = vi.hoisted(() => ({ building: true, supported: true }))
+vi.mock('@/features/settings/composables/useAppInfo', () => ({
+  useAppInfo: () => ({
+    ensureAppInfo: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    supportsFeature: () => appInfoState.supported,
+    storyGuides: {
+      get value() {
+        return { building: appInfoState.building }
+      },
+    },
+  }),
+}))
+
 const permissionState = {
   allowed: new Set<string>(),
   demoRestricted: false,
@@ -543,5 +556,56 @@ describe('SelectionActionBar bulk run pill', () => {
 
     expect(wrapper.find('[data-testid="bulk-run-cancel"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="bulk-run-hide"]').exists()).toBe(false)
+  })
+})
+
+describe('bulk Story Guides', () => {
+  beforeEach(() => {
+    permissionState.allowed = new Set(['library_generate_story_guide'])
+    permissionState.demoRestricted = false
+    appInfoState.building = true
+    appInfoState.supported = true
+  })
+
+  it('confirms selected books, skips existing guides and explains cost limits', async () => {
+    const wrapper = mountBar()
+    await wrapper.setProps({ storyGuidesEnabled: true, queryScoped: true, count: 12000 })
+    await wrapper.get('[data-testid="action-build-story-guides"]').trigger('click')
+    expect(wrapper.emitted('build-story-guides')).toBeUndefined()
+    const text = wrapper.get('[data-testid="bulk-story-guides-confirm"]').text()
+    expect(text).toContain('12000 selected books')
+    expect(text).toContain('existing guides are skipped')
+    expect(text).toContain('AI cost limits apply')
+    await wrapper.get('[data-testid="bulk-story-guides-confirm-action"]').trigger('click')
+    expect(wrapper.emitted('build-story-guides')).toEqual([[]])
+  })
+
+  it('cancels without submitting', async () => {
+    const wrapper = mountBar()
+    await wrapper.setProps({ storyGuidesEnabled: true })
+    await wrapper.get('[data-testid="action-build-story-guides"]').trigger('click')
+    await wrapper.get('[data-testid="bulk-story-guides-cancel"]').trigger('click')
+    expect(wrapper.emitted('build-story-guides')).toBeUndefined()
+    expect(wrapper.find('[data-testid="bulk-story-guides-confirm"]').exists()).toBe(false)
+  })
+
+  it('requires opt-in, native permission and server building availability', async () => {
+    const wrapper = mountBar()
+    expect(wrapper.find('[data-testid="action-build-story-guides"]').exists()).toBe(false)
+    await wrapper.setProps({ storyGuidesEnabled: true })
+    expect(wrapper.find('[data-testid="action-build-story-guides"]').exists()).toBe(true)
+    permissionState.allowed.clear()
+    expect(
+      mount(SelectionActionBar, { props: { visible: true, count: 3, storyGuidesEnabled: true }, global: globalStubs })
+        .find('[data-testid="action-build-story-guides"]')
+        .exists(),
+    ).toBe(false)
+    permissionState.allowed.add('library_generate_story_guide')
+    appInfoState.building = false
+    expect(
+      mount(SelectionActionBar, { props: { visible: true, count: 3, storyGuidesEnabled: true }, global: globalStubs })
+        .find('[data-testid="action-build-story-guides"]')
+        .exists(),
+    ).toBe(false)
   })
 })

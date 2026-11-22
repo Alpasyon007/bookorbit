@@ -17,9 +17,13 @@ export class BulkRunStopped extends Error {
 }
 
 /** Every bulk route asks for this, and none lets a demo account in. */
-function mayRunBulk(user: RequestUser): boolean {
+function mayRunBulk(user: RequestUser, kind?: BulkRunRow['kind']): boolean {
   if (user.permissions.includes(Permission.DemoRestricted)) return false;
-  return user.isSuperuser || user.permissions.includes(Permission.LibraryEditMetadata);
+  return (
+    user.active &&
+    (user.isSuperuser ||
+      user.permissions.includes(kind === 'book-build-story-guides' ? Permission.LibraryGenerateStoryGuide : Permission.LibraryEditMetadata))
+  );
 }
 
 /**
@@ -34,16 +38,16 @@ export class BulkRunActorService {
     private readonly apiKeys: ApiKeyAuthenticator,
   ) {}
 
-  async resolve(run: Pick<BulkRunRow, 'requestedBy' | 'credentialKind' | 'apiKeyId'>): Promise<RequestUser> {
+  async resolve(run: Pick<BulkRunRow, 'requestedBy' | 'credentialKind' | 'apiKeyId'> & Partial<Pick<BulkRunRow, 'kind'>>): Promise<RequestUser> {
     if (run.requestedBy === null) throw new BulkRunStopped('requester-gone');
     if (run.credentialKind === 'api_key') {
       if (run.apiKeyId === null) throw new BulkRunStopped('credential-revoked');
       const actor = await this.apiKeys.actorForStoredKey(run.apiKeyId, run.requestedBy);
-      if (!actor || !mayRunBulk(actor)) throw new BulkRunStopped('credential-revoked');
+      if (!actor || !mayRunBulk(actor, run.kind)) throw new BulkRunStopped('credential-revoked');
       return actor;
     }
     const user = await this.auth.findActingUser(run.requestedBy);
-    if (!user || !mayRunBulk(user)) throw new BulkRunStopped('access-revoked');
+    if (!user || !mayRunBulk(user, run.kind)) throw new BulkRunStopped('access-revoked');
     return user;
   }
 

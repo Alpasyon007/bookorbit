@@ -8,6 +8,9 @@ import { AiJobsModule } from '../ai-jobs/ai-jobs.module';
 import { AiJobsService } from '../ai-jobs/ai-jobs.service';
 import { AppAttestModule } from '../app-attest/app-attest.module';
 import { BookModule } from '../book/book.module';
+import { BulkRunsModule } from '../bulk-runs/bulk-runs.module';
+import { StoryGuidesBulkController } from './story-guides-bulk.controller';
+import { StoryGuidesBulkHandler } from './story-guides-bulk.handler';
 import { AI_JOBS_PORTS_PROVIDER, AiJobsConnection } from './ai-jobs-connection';
 import { StoryGuideFixesController } from './fixes/story-guide-fixes.controller';
 import { StoryGuideFixesRepository } from './fixes/story-guide-fixes.repository';
@@ -31,9 +34,10 @@ import { STORY_TEXT_KEY_MOVES, type StoryTextKeyMoves } from './story-text.types
  * once, since story guides are its only feature.
  */
 @Module({
-  imports: [AiModule, AppAttestModule, BookModule, AiJobsModule.register({ imports: [AiModule], ports: AI_JOBS_PORTS_PROVIDER })],
-  controllers: [StoryGuidesController, StoryGuidesAdminController, StoryGuideContentController, StoryGuideFixesController],
+  imports: [AiModule, AppAttestModule, BookModule, BulkRunsModule, AiJobsModule.register({ imports: [AiModule], ports: AI_JOBS_PORTS_PROVIDER })],
+  controllers: [StoryGuidesBulkController, StoryGuidesController, StoryGuidesAdminController, StoryGuideContentController, StoryGuideFixesController],
   providers: [
+    StoryGuidesBulkHandler,
     AiJobsConnection,
     StoryTextRepository,
     StoryTextService,

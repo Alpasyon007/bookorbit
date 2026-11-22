@@ -88,6 +88,17 @@ describe('AiJobsService.request', () => {
     });
   });
 
+  it('only skips existing artifacts when requested', async () => {
+    const s = makeService();
+    s.artifacts.findInfo.mockResolvedValue(artifact());
+    expect(await s.service.request({ feature: s.h.feature.id, kind: 'build', subjectRef: s.ref, actor: s.actor, onlyIfMissing: true })).toEqual({
+      kind: 'refused',
+      refusal: { reason: 'artifact-exists' },
+    });
+    expect(s.jobs.create).not.toHaveBeenCalled();
+    expect((await s.request('build')).kind).toBe('created');
+  });
+
   it('builds in the generation of the latest job when there is no artifact, so a cancelled build is reused', async () => {
     const s = makeService();
     s.jobs.findLatest.mockResolvedValueOnce({ generation: 4 } as AiJobRow);

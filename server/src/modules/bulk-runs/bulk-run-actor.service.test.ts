@@ -47,6 +47,15 @@ describe('BulkRunActorService', () => {
     expect(await stoppedCode(service.resolve(sessionRun))).toBe('access-revoked');
   });
 
+  it('requires the story guide permission for story guide runs', async () => {
+    const { service, auth } = setup();
+    const run = { ...sessionRun, kind: 'book-build-story-guides' as const };
+    expect(await stoppedCode(service.resolve(run))).toBe('access-revoked');
+    const builder = { ...editor, permissions: [Permission.LibraryGenerateStoryGuide] } as RequestUser;
+    auth.findActingUser.mockResolvedValueOnce(builder);
+    await expect(service.resolve(run)).resolves.toBe(builder);
+  });
+
   it('stops a run whose requester is gone', async () => {
     const { service } = setup();
     expect(await stoppedCode(service.resolve({ ...sessionRun, requestedBy: null }))).toBe('requester-gone');

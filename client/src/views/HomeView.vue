@@ -595,6 +595,7 @@ const {
   handleBulkRefreshMetadata,
   handleBulkReExtractCover,
   handleBulkEmbedAudioCover,
+  handleBulkBuildStoryGuides,
   handleDownloadFiles,
   handleBulkSetStatus,
   handleBulkSetRating,
@@ -1162,6 +1163,7 @@ defineOptions({ name: 'HomeView' })
     </Transition>
 
     <SelectionActionBar
+      story-guides-enabled
       :metadata-editable="canEditSelectionMetadata"
       :visible="selectionMode"
       :count="querySelection ? querySelection.total : selectedCount"
@@ -1182,6 +1184,7 @@ defineOptions({ name: 'HomeView' })
       @refresh-metadata="handleBulkRefreshMetadata"
       @re-extract-cover="handleBulkReExtractCover"
       @embed-audio-cover="handleBulkEmbedAudioCover"
+      @build-story-guides="handleBulkBuildStoryGuides"
       @set-status="handleBulkSetStatus"
       @set-rating="handleBulkSetRating"
       @set-field="handleBulkSetField"
