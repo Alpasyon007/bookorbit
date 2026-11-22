@@ -1,5 +1,18 @@
 [
   {
+    "file": "server/src/modules/setup-overview/setup-overview.controller.ts",
+    "className": "SetupOverviewController",
+    "methodName": "get",
+    "httpMethod": "GET",
+    "path": "/setup-overview",
+    "permissions": ["Permission.ManageAppSettings"],
+    "libraryAccess": [],
+    "isPublic": false,
+    "allowDefault": false,
+    "useGuards": [],
+    "apiKey": "read"
+  },
+  {
     "file": "server/src/modules/book-request/series-catalog.controller.ts",
     "className": "SeriesCatalogController",
     "methodName": "search",
